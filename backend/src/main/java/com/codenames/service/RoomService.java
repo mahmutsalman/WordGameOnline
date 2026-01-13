@@ -1,5 +1,6 @@
 package com.codenames.service;
 
+import com.codenames.dto.events.RoomStateEvent;
 import com.codenames.dto.response.PlayerResponse;
 import com.codenames.dto.response.RoomResponse;
 import com.codenames.exception.RoomNotFoundException;
@@ -132,14 +133,7 @@ public class RoomService {
      */
     public RoomResponse toResponse(Room room) {
         List<PlayerResponse> players = room.getPlayers().stream()
-                .map(p -> PlayerResponse.builder()
-                        .id(p.getId())
-                        .username(p.getUsername())
-                        .team(p.getTeam())
-                        .role(p.getRole())
-                        .connected(p.isConnected())
-                        .admin(p.isAdmin())
-                        .build())
+                .map(this::toPlayerResponse)
                 .collect(Collectors.toList());
 
         return RoomResponse.builder()
@@ -148,6 +142,40 @@ public class RoomService {
                 .settings(room.getSettings())
                 .canStart(room.canStart())
                 .adminId(room.getAdminId())
+                .build();
+    }
+
+    /**
+     * Converts a Room entity to a RoomStateEvent for WebSocket broadcasting.
+     * Contains player list, settings, and game readiness status.
+     *
+     * @param room the room to convert
+     * @return the room state event
+     */
+    public RoomStateEvent toRoomState(Room room) {
+        return RoomStateEvent.builder()
+                .players(room.getPlayers().stream()
+                        .map(this::toPlayerResponse)
+                        .collect(Collectors.toList()))
+                .settings(room.getSettings())
+                .canStart(room.canStart())
+                .build();
+    }
+
+    /**
+     * Helper method to convert a Player to PlayerResponse DTO.
+     *
+     * @param player the player to convert
+     * @return the player response DTO
+     */
+    private PlayerResponse toPlayerResponse(Player player) {
+        return PlayerResponse.builder()
+                .id(player.getId())
+                .username(player.getUsername())
+                .team(player.getTeam())
+                .role(player.getRole())
+                .connected(player.isConnected())
+                .admin(player.isAdmin())
                 .build();
     }
 }

@@ -1,0 +1,656 @@
+{
+	"info": {
+		"_postman_id": "codenames-websocket-tests",
+		"name": "Codenames - WebSocket Tests",
+		"description": "Comprehensive test collection for Codenames game API and WebSocket functionality",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "REST API Tests",
+			"item": [
+				{
+					"name": "1. Create Room (Admin)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// Validate response",
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has required fields\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('roomId');",
+									"    pm.expect(jsonData).to.have.property('players');",
+									"    pm.expect(jsonData).to.have.property('settings');",
+									"    pm.expect(jsonData).to.have.property('canStart');",
+									"    pm.expect(jsonData).to.have.property('adminId');",
+									"});",
+									"",
+									"pm.test(\"Admin player created correctly\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.players).to.be.an('array').with.lengthOf(1);",
+									"    pm.expect(jsonData.players[0].username).to.eql('AdminUser');",
+									"    pm.expect(jsonData.players[0].admin).to.be.true;",
+									"    pm.expect(jsonData.players[0].role).to.eql('SPECTATOR');",
+									"});",
+									"",
+									"pm.test(\"Room ID format is correct\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    // Format: XXXXX-XXXXX (5 chars, hyphen, 5 chars)",
+									"    pm.expect(jsonData.roomId).to.match(/^[A-Z0-9]{5}-[A-Z0-9]{5}$/);",
+									"});",
+									"",
+									"// Store room ID and admin ID for next requests",
+									"var responseJson = pm.response.json();",
+									"pm.collectionVariables.set(\"roomId\", responseJson.roomId);",
+									"pm.collectionVariables.set(\"adminId\", responseJson.players[0].id);",
+									"",
+									"console.log(\"✅ Room created: \" + responseJson.roomId);",
+									"console.log(\"✅ Admin ID: \" + responseJson.players[0].id);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"AdminUser\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rooms",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rooms"
+							]
+						},
+						"description": "Create a new room with an admin user"
+					},
+					"response": []
+				},
+				{
+					"name": "2. Get Room Details",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Room details match created room\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.roomId).to.eql(pm.collectionVariables.get(\"roomId\"));",
+									"    pm.expect(jsonData.players).to.be.an('array');",
+									"});",
+									"",
+									"console.log(\"✅ Room details retrieved successfully\");"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rooms/{{roomId}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rooms",
+								"{{roomId}}"
+							]
+						},
+						"description": "Retrieve details of the created room"
+					},
+					"response": []
+				},
+				{
+					"name": "3. Join Room (Player 2)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Player joined successfully\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.players).to.be.an('array').with.lengthOf(2);",
+									"    ",
+									"    // Find Player2",
+									"    var player2 = jsonData.players.find(p => p.username === 'Player2');",
+									"    pm.expect(player2).to.exist;",
+									"    pm.expect(player2.admin).to.be.false;",
+									"    pm.expect(player2.role).to.eql('SPECTATOR');",
+									"    ",
+									"    // Store Player2 ID",
+									"    pm.collectionVariables.set(\"player2Id\", player2.id);",
+									"});",
+									"",
+									"console.log(\"✅ Player2 joined the room\");"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"Player2\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rooms/{{roomId}}/join",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rooms",
+								"{{roomId}}",
+								"join"
+							]
+						},
+						"description": "Add a second player to the room"
+					},
+					"response": []
+				},
+				{
+					"name": "4. Join Room (Duplicate Username - Should Fail)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 409 Conflict\", function () {",
+									"    pm.response.to.have.status(409);",
+									"});",
+									"",
+									"pm.test(\"Error message contains 'already taken'\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.message).to.include('already taken');",
+									"});",
+									"",
+									"console.log(\"✅ Duplicate username correctly rejected\");"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"Player2\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/api/rooms/{{roomId}}/join",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rooms",
+								"{{roomId}}",
+								"join"
+							]
+						},
+						"description": "Try to join with duplicate username - should fail"
+					},
+					"response": []
+				},
+				{
+					"name": "5. Get Non-Existent Room (Should Fail)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404 Not Found\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});",
+									"",
+									"pm.test(\"Error message contains 'not found'\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.message.toLowerCase()).to.include('not found');",
+									"});",
+									"",
+									"console.log(\"✅ Non-existent room correctly returns 404\");"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/api/rooms/INVALID-ROOM",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"api",
+								"rooms",
+								"INVALID-ROOM"
+							]
+						},
+						"description": "Try to get a room that doesn't exist"
+					},
+					"response": []
+				}
+			],
+			"description": "Test REST API endpoints for room management"
+		},
+		{
+			"name": "WebSocket Tests (Manual)",
+			"item": [
+				{
+					"name": "WebSocket Connection Info",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/ws/info",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"ws",
+								"info"
+							]
+						},
+						"description": "Get WebSocket endpoint information (SockJS info endpoint)"
+					},
+					"response": []
+				}
+			],
+			"description": "WebSocket tests require a WebSocket client. Use the instructions below to test with Postman's WebSocket features or external tools.",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"type": "text/javascript",
+						"exec": [
+							"// Instructions for WebSocket Testing",
+							"console.log(\"=== WebSocket Testing Instructions ===\");",
+							"console.log(\"1. WebSocket URL: ws://localhost:8080/ws\");",
+							"console.log(\"2. Protocol: STOMP over SockJS\");",
+							"console.log(\"3. Room ID: \" + pm.collectionVariables.get(\"roomId\"));",
+							"console.log(\"\");",
+							"console.log(\"=== Test Scenarios ===\");",
+							"console.log(\"A) Player Join:\");",
+							"console.log(\"   - Connect to WebSocket\");",
+							"console.log(\"   - Subscribe to: /topic/room/\" + pm.collectionVariables.get(\"roomId\"));",
+							"console.log(\"   - Subscribe to: /user/queue/private\");",
+							"console.log(\"   - Send to: /app/room/\" + pm.collectionVariables.get(\"roomId\") + \"/join\");",
+							"console.log(\"   - Payload: {\\\"username\\\": \\\"WebSocketPlayer\\\"}\");",
+							"console.log(\"   - Expected: PLAYER_JOINED broadcast + ROOM_STATE private message\");",
+							"console.log(\"\");",
+							"console.log(\"B) Error Cases:\");",
+							"console.log(\"   - Invalid room: /app/room/INVALID/join\");",
+							"console.log(\"   - Duplicate username: Use 'Player2'\");",
+							"console.log(\"\");"
+						]
+					}
+				}
+			]
+		},
+		{
+			"name": "Integration Scenarios",
+			"item": [
+				{
+					"name": "Scenario 1: Complete Room Flow",
+					"item": [
+						{
+							"name": "1.1 Create New Room",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Room created\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    pm.collectionVariables.set(\"scenarioRoomId\", jsonData.roomId);",
+											"    console.log(\"Scenario Room ID: \" + jsonData.roomId);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"GameMaster\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "1.2 Join Room - Player 1",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Player 1 joined\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    pm.expect(jsonData.players).to.have.lengthOf(2);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"BlueSpymaster\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{scenarioRoomId}}/join",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{scenarioRoomId}}",
+										"join"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "1.3 Join Room - Player 2",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Player 2 joined\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    pm.expect(jsonData.players).to.have.lengthOf(3);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"BlueOperative\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{scenarioRoomId}}/join",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{scenarioRoomId}}",
+										"join"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "1.4 Join Room - Player 3",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Player 3 joined\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    pm.expect(jsonData.players).to.have.lengthOf(4);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"RedSpymaster\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{scenarioRoomId}}/join",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{scenarioRoomId}}",
+										"join"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "1.5 Join Room - Player 4",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Player 4 joined\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    pm.expect(jsonData.players).to.have.lengthOf(5);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"RedOperative\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{scenarioRoomId}}/join",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{scenarioRoomId}}",
+										"join"
+									]
+								}
+							},
+							"response": []
+						},
+						{
+							"name": "1.6 Verify Final Room State",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Room has 5 players\", function () {",
+											"    pm.response.to.have.status(200);",
+											"    var jsonData = pm.response.json();",
+											"    pm.expect(jsonData.players).to.have.lengthOf(5);",
+											"});",
+											"",
+											"pm.test(\"All players present\", function () {",
+											"    var jsonData = pm.response.json();",
+											"    var usernames = jsonData.players.map(p => p.username);",
+											"    pm.expect(usernames).to.include.members([",
+											"        'GameMaster', 'BlueSpymaster', 'BlueOperative', ",
+											"        'RedSpymaster', 'RedOperative'",
+											"    ]);",
+											"});",
+											"",
+											"console.log(\"✅ Full scenario completed successfully!\");"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{scenarioRoomId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{scenarioRoomId}}"
+									]
+								}
+							},
+							"response": []
+						}
+					],
+					"description": "Complete flow: Create room and add multiple players"
+				}
+			],
+			"description": "End-to-end integration test scenarios"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "roomId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "adminId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "player2Id",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "scenarioRoomId",
+			"value": "",
+			"type": "string"
+		}
+	]
+}
