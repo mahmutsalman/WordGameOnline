@@ -1,7 +1,7 @@
 package com.codenames.service;
 
-import com.codenames.dto.PlayerResponse;
-import com.codenames.dto.RoomResponse;
+import com.codenames.dto.response.PlayerResponse;
+import com.codenames.dto.response.RoomResponse;
 import com.codenames.exception.RoomNotFoundException;
 import com.codenames.exception.UsernameAlreadyExistsException;
 import com.codenames.factory.RoomFactory;

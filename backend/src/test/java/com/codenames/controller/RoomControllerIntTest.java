@@ -1,7 +1,7 @@
 package com.codenames.controller;
 
-import com.codenames.dto.CreateRoomRequest;
-import com.codenames.dto.JoinRoomRequest;
+import com.codenames.dto.request.CreateRoomRequest;
+import com.codenames.dto.request.JoinRoomRequest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;

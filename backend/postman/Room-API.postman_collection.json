@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "codenames-room-api",
 		"name": "Codenames - Room API",
-		"description": "REST API endpoints for room creation and management (Step-02)",
+		"description": "REST API endpoints for room creation and management with reorganized DTO structure (request/, response/, events/)",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -96,6 +96,19 @@
 							"pm.test(\"Players array is not empty\", function () {",
 							"    var jsonData = pm.response.json();",
 							"    pm.expect(jsonData.players.length).to.be.greaterThan(0);",
+							"});",
+							"",
+							"pm.test(\"PlayerResponse DTOs have correct structure\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    if (jsonData.players.length > 0) {",
+							"        var player = jsonData.players[0];",
+							"        pm.expect(player).to.have.property('id');",
+							"        pm.expect(player).to.have.property('username');",
+							"        pm.expect(player).to.have.property('team');",
+							"        pm.expect(player).to.have.property('role');",
+							"        pm.expect(player).to.have.property('connected');",
+							"        pm.expect(player).to.have.property('admin');",
+							"    }",
 							"});"
 						],
 						"type": "text/javascript"
@@ -158,6 +171,46 @@
 					]
 				},
 				"description": "Checks if a room exists by room ID.\nReturns 200 OK with {\"exists\": true/false}."
+			},
+			"response": []
+		},
+		{
+			"name": "Check Room Exists - Not Found",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Response indicates room does not exist\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('exists');",
+							"    pm.expect(jsonData.exists).to.be.false;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/NONEXISTENT/exists",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"rooms",
+						"NONEXISTENT",
+						"exists"
+					]
+				},
+				"description": "Tests exists check for non-existent room ID.\nReturns 200 OK with {\"exists\": false}."
 			},
 			"response": []
 		},
@@ -269,6 +322,103 @@
 					]
 				},
 				"description": "Tests duplicate username validation.\nShould return 409 CONFLICT when trying to join with an existing username."
+			},
+			"response": []
+		},
+		{
+			"name": "Join Room - Empty Username (Error)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400 Bad Request\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Response has validation error\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('username');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/join",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"rooms",
+						"{{roomId}}",
+						"join"
+					]
+				},
+				"description": "Tests JoinRoomRequest validation for empty username.\nShould return 400 BAD REQUEST with validation error."
+			},
+			"response": []
+		},
+		{
+			"name": "Join Room - Invalid Room (Error)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 404 Not Found\", function () {",
+							"    pm.response.to.have.status(404);",
+							"});",
+							"",
+							"pm.test(\"Response has error message\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('error');",
+							"    pm.expect(jsonData.error).to.include('INVALID-ROOM');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"Player3\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/INVALID-ROOM/join",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"rooms",
+						"INVALID-ROOM",
+						"join"
+					]
+				},
+				"description": "Tests error handling when joining non-existent room.\nShould return 404 NOT FOUND with error message."
 			},
 			"response": []
 		},

@@ -1,4 +1,4 @@
-package com.codenames.dto;
+package com.codenames.dto.response;
 
 import com.codenames.model.GameSettings;
 import lombok.Builder;

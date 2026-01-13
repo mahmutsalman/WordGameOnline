@@ -1,8 +1,8 @@
 package com.codenames.controller;
 
-import com.codenames.dto.CreateRoomRequest;
-import com.codenames.dto.JoinRoomRequest;
-import com.codenames.dto.RoomResponse;
+import com.codenames.dto.request.CreateRoomRequest;
+import com.codenames.dto.request.JoinRoomRequest;
+import com.codenames.dto.response.RoomResponse;
 import com.codenames.model.Room;
 import com.codenames.service.RoomService;
 import jakarta.validation.Valid;
