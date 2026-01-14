@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Codenames WebSocket Test Client</title>
+    <script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stompjs@2.3.3/lib/stomp.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 {
+            color: #333;
+            margin-top: 0;
+        }
+        h2 {
+            color: #666;
+            border-bottom: 2px solid #ddd;
+            padding-bottom: 10px;
+        }
+        input {
+            padding: 8px;
+            margin: 5px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 200px;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background 0.3s;
+        }
+        .btn-connect {
+            background: #4CAF50;
+            color: white;
+        }
+        .btn-connect:hover {
+            background: #45a049;
+        }
+        .btn-disconnect {
+            background: #f44336;
+            color: white;
+        }
+        .btn-disconnect:hover {
+            background: #da190b;
+        }
+        .btn-test {
+            background: #2196F3;
+            color: white;
+        }
+        .btn-test:hover {
+            background: #0b7dda;
+        }
+        .btn-test:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        #status {
+            padding: 10px;
+            border-radius: 4px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .status-disconnected {
+            background: #ffebee;
+            color: #c62828;
+        }
+        .status-connected {
+            background: #e8f5e9;
+            color: #2e7d32;
+        }
+        #messages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            background: #fafafa;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+        }
+        .message {
+            padding: 8px;
+            margin: 4px 0;
+            border-radius: 4px;
+            border-left: 4px solid #ccc;
+        }
+        .message-broadcast {
+            background: #e3f2fd;
+            border-left-color: #2196F3;
+        }
+        .message-private {
+            background: #f3e5f5;
+            border-left-color: #9c27b0;
+        }
+        .message-error {
+            background: #ffebee;
+            border-left-color: #f44336;
+        }
+        .message-system {
+            background: #fff3e0;
+            border-left-color: #ff9800;
+        }
+        .timestamp {
+            color: #999;
+            font-size: 10px;
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 10px;
+            margin: 10px 0;
+        }
+        .instructions {
+            background: #fff8e1;
+            padding: 15px;
+            border-radius: 4px;
+            border-left: 4px solid #ffc107;
+            margin: 15px 0;
+        }
+        .instructions ol {
+            margin: 10px 0;
+            padding-left: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🎮 Codenames WebSocket Test Client</h1>
+
+    <div class="container instructions">
+        <h3>📋 Quick Start Instructions:</h3>
+        <ol>
+            <li><strong>Create Room First:</strong> Use REST API to create a room (see Postman collection "2.1 Create New Room for WS Tests")</li>
+            <li><strong>Copy Room ID:</strong> Paste the room ID from the response into the "Room ID" field below</li>
+            <li><strong>Enter Username:</strong> Choose any username (e.g., "WSPlayer1")</li>
+            <li><strong>Click Connect:</strong> This will establish WebSocket connection</li>
+            <li><strong>Run Tests:</strong> Click the test buttons in order (Test 1 → Test 2 → Test 3...)</li>
+        </ol>
+    </div>
+
+    <div class="container">
+        <h2>🔌 Connection</h2>
+        <div>
+            <input id="roomId" placeholder="Room ID (paste from REST API)" style="width: 300px;" />
+            <input id="username" placeholder="Username (e.g., WSPlayer1)" />
+        </div>
+        <div style="margin-top: 10px;">
+            <button class="btn-connect" onclick="connect()">🟢 Connect</button>
+            <button class="btn-disconnect" onclick="disconnect()">🔴 Disconnect</button>
+            <button class="btn-test" onclick="clearMessages()">🗑️ Clear Messages</button>
+        </div>
+        <div id="status" class="status-disconnected">⚫ Disconnected</div>
+    </div>
+
+    <div class="container">
+        <h2>🧪 Test Scenarios</h2>
+        <div class="test-grid">
+            <button class="btn-test" onclick="joinRoom()" id="test1">Test 1: Join Room ✅</button>
+            <button class="btn-test" onclick="changeToOperative()" id="test2">Test 2: Blue Operative ✅</button>
+            <button class="btn-test" onclick="changeToSpymaster()" id="test3">Test 3: Blue Spymaster ✅</button>
+            <button class="btn-test" onclick="tryDuplicateSpymaster()" id="test4">Test 4: Duplicate Spymaster ❌</button>
+            <button class="btn-test" onclick="changeToSpectator()" id="test5">Test 5: Spectator ✅</button>
+            <button class="btn-test" onclick="disconnect()" id="test6">Test 6: Disconnect ✅</button>
+        </div>
+        <p style="color: #666; font-size: 14px;">
+            ℹ️ <strong>Test 4 Note:</strong> For duplicate spymaster test, open this page in another tab/window,
+            connect with different username, then both try to become Blue Spymaster.
+        </p>
+    </div>
+
+    <div class="container">
+        <h2>📨 Messages</h2>
+        <div id="messages"></div>
+    </div>
+
+    <script>
+        let stompClient = null;
+        let connected = false;
+
+        const roomId = () => document.getElementById('roomId').value.trim();
+        const username = () => document.getElementById('username').value.trim();
+
+        function updateStatus(isConnected) {
+            connected = isConnected;
+            const status = document.getElementById('status');
+            if (isConnected) {
+                status.className = 'status-connected';
+                status.innerHTML = '🟢 Connected';
+            } else {
+                status.className = 'status-disconnected';
+                status.innerHTML = '⚫ Disconnected';
+            }
+            updateButtonStates();
+        }
+
+        function updateButtonStates() {
+            const testButtons = ['test1', 'test2', 'test3', 'test4', 'test5'];
+            testButtons.forEach(id => {
+                document.getElementById(id).disabled = !connected;
+            });
+        }
+
+        function connect() {
+            if (!roomId()) {
+                alert('⚠️ Please enter Room ID first! Create a room using REST API (Postman "2.1 Create New Room")');
+                return;
+            }
+            if (!username()) {
+                alert('⚠️ Please enter Username!');
+                return;
+            }
+
+            logSystem('🔄 Connecting to ws://localhost:8080/ws...');
+
+            const socket = new SockJS('http://localhost:8080/ws');
+            stompClient = Stomp.over(socket);
+
+            // Disable debug output (comment this line to see STOMP frames)
+            stompClient.debug = null;
+
+            stompClient.connect({}, function(frame) {
+                logSystem('✅ Connected successfully!');
+                updateStatus(true);
+
+                // Subscribe to room broadcasts
+                stompClient.subscribe('/topic/room/' + roomId(), function(message) {
+                    const data = JSON.parse(message.body);
+                    logBroadcast(data);
+                });
+
+                // Subscribe to private messages
+                stompClient.subscribe('/user/queue/private', function(message) {
+                    const data = JSON.parse(message.body);
+                    logPrivate(data);
+                });
+
+                logSystem('✅ Subscribed to /topic/room/' + roomId());
+                logSystem('✅ Subscribed to /user/queue/private');
+                logSystem('📍 Ready to test! Click "Test 1: Join Room" to start.');
+            }, function(error) {
+                logError('❌ Connection failed: ' + error);
+                updateStatus(false);
+            });
+        }
+
+        function disconnect() {
+            if (stompClient !== null) {
+                stompClient.disconnect();
+                logSystem('🔴 Disconnected');
+            }
+            updateStatus(false);
+        }
+
+        function joinRoom() {
+            if (!checkConnection()) return;
+            logSystem('▶️ Test 1: Sending join request...');
+            stompClient.send('/app/room/' + roomId() + '/join', {},
+                JSON.stringify({username: username()}));
+        }
+
+        function changeToOperative() {
+            if (!checkConnection()) return;
+            logSystem('▶️ Test 2: Changing to Blue Operative...');
+            stompClient.send('/app/room/' + roomId() + '/team', {},
+                JSON.stringify({team: 'BLUE', role: 'OPERATIVE'}));
+        }
+
+        function changeToSpymaster() {
+            if (!checkConnection()) return;
+            logSystem('▶️ Test 3: Changing to Blue Spymaster...');
+            stompClient.send('/app/room/' + roomId() + '/team', {},
+                JSON.stringify({team: 'BLUE', role: 'SPYMASTER'}));
+        }
+
+        function tryDuplicateSpymaster() {
+            if (!checkConnection()) return;
+            logSystem('▶️ Test 4: Trying to become Blue Spymaster (should fail if already exists)...');
+            stompClient.send('/app/room/' + roomId() + '/team', {},
+                JSON.stringify({team: 'BLUE', role: 'SPYMASTER'}));
+        }
+
+        function changeToSpectator() {
+            if (!checkConnection()) return;
+            logSystem('▶️ Test 5: Changing to Spectator...');
+            stompClient.send('/app/room/' + roomId() + '/team', {},
+                JSON.stringify({role: 'SPECTATOR'}));
+        }
+
+        function checkConnection() {
+            if (!connected) {
+                alert('⚠️ Please connect first!');
+                return false;
+            }
+            return true;
+        }
+
+        function logBroadcast(data) {
+            log('📢 BROADCAST: ' + JSON.stringify(data, null, 2), 'message-broadcast');
+        }
+
+        function logPrivate(data) {
+            log('🔒 PRIVATE: ' + JSON.stringify(data, null, 2), 'message-private');
+        }
+
+        function logError(message) {
+            log('❌ ERROR: ' + message, 'message-error');
+        }
+
+        function logSystem(message) {
+            log('ℹ️ SYSTEM: ' + message, 'message-system');
+        }
+
+        function log(message, className = '') {
+            const div = document.getElementById('messages');
+            const timestamp = new Date().toLocaleTimeString();
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ' + className;
+            messageDiv.innerHTML = '<span class="timestamp">[' + timestamp + ']</span> ' +
+                                  message.replace(/\n/g, '<br>');
+            div.appendChild(messageDiv);
+            div.scrollTop = div.scrollHeight;
+        }
+
+        function clearMessages() {
+            document.getElementById('messages').innerHTML = '';
+            logSystem('Messages cleared');
+        }
+
+        // Disable test buttons on load
+        updateButtonStates();
+    </script>
+</body>
+</html>

@@ -405,4 +405,196 @@ class RoomServiceTest {
         assertThat(response.getPlayers().get(1).isConnected()).isFalse();
         assertThat(response.getPlayers().get(1).isAdmin()).isFalse();
     }
+
+    // ========== CHANGE_TEAM TESTS ==========
+
+    @Test
+    void shouldChangePlayerTeam() {
+        // Arrange
+        Player player = Player.builder()
+                .id("p1")
+                .username("Player1")
+                .team(null)
+                .role(Role.SPECTATOR)
+                .build();
+
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(player)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act
+        Room result = roomService.changePlayerTeam("TEST", "p1", Team.BLUE, Role.OPERATIVE);
+
+        // Assert
+        assertThat(result.getPlayer("p1")).isPresent();
+        Player updatedPlayer = result.getPlayer("p1").get();
+        assertThat(updatedPlayer.getTeam()).isEqualTo(Team.BLUE);
+        assertThat(updatedPlayer.getRole()).isEqualTo(Role.OPERATIVE);
+    }
+
+    @Test
+    void shouldThrowExceptionIfSpymasterAlreadyExists() {
+        // Arrange: Create room with existing Blue Spymaster
+        Player spymaster = Player.builder()
+                .id("p1")
+                .username("BlueSpymaster")
+                .team(Team.BLUE)
+                .role(Role.SPYMASTER)
+                .build();
+
+        Player player2 = Player.builder()
+                .id("p2")
+                .username("Player2")
+                .team(null)
+                .role(Role.SPECTATOR)
+                .build();
+
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(spymaster, player2)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act & Assert
+        assertThatThrownBy(() ->
+            roomService.changePlayerTeam("TEST", "p2", Team.BLUE, Role.SPYMASTER)
+        )
+        .isInstanceOf(com.codenames.exception.SpymasterAlreadyExistsException.class)
+        .hasMessageContaining("already has a spymaster");
+    }
+
+    @Test
+    void shouldAllowNullTeamForSpectator() {
+        // Arrange
+        Player player = Player.builder()
+                .id("p1")
+                .username("Player1")
+                .team(Team.BLUE)
+                .role(Role.OPERATIVE)
+                .build();
+
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(player)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act
+        Room result = roomService.changePlayerTeam("TEST", "p1", null, Role.SPECTATOR);
+
+        // Assert
+        Player updatedPlayer = result.getPlayer("p1").get();
+        assertThat(updatedPlayer.getTeam()).isNull();
+        assertThat(updatedPlayer.getRole()).isEqualTo(Role.SPECTATOR);
+    }
+
+    @Test
+    void shouldThrowExceptionIfPlayerNotFound() {
+        // Arrange
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>())
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act & Assert
+        assertThatThrownBy(() ->
+            roomService.changePlayerTeam("TEST", "non-existent-id", Team.BLUE, Role.OPERATIVE)
+        )
+        .isInstanceOf(com.codenames.exception.PlayerNotFoundException.class)
+        .hasMessageContaining("Player not found");
+    }
+
+    // ========== DISCONNECT TESTS ==========
+
+    @Test
+    void shouldMarkPlayerDisconnected() {
+        // Arrange
+        Player player1 = Player.builder()
+                .id("p1")
+                .username("Player1")
+                .connected(true)
+                .build();
+
+        Player player2 = Player.builder()
+                .id("p2")
+                .username("Player2")
+                .connected(true)
+                .build();
+
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(player1, player2)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act
+        roomService.markPlayerDisconnected("TEST", "p1");
+
+        // Assert: Player should be removed from room
+        assertThat(mockRoom.getPlayer("p1")).isEmpty();
+        assertThat(mockRoom.getPlayers()).hasSize(1);
+        assertThat(mockRoom.getPlayers()).contains(player2);
+    }
+
+    @Test
+    void shouldDeleteRoomWhenLastPlayerDisconnects() {
+        // Arrange: Create room with only one player
+        Player lastPlayer = Player.builder()
+                .id("p1")
+                .username("LastPlayer")
+                .connected(true)
+                .build();
+
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(lastPlayer)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act: Last player disconnects
+        roomService.markPlayerDisconnected("TEST", "p1");
+
+        // Assert: Room should be deleted
+        verify(roomRepository).deleteById("TEST");
+    }
+
+    @Test
+    void shouldNotDeleteRoomIfPlayersRemain() {
+        // Arrange
+        Player player1 = Player.builder()
+                .id("p1")
+                .username("Player1")
+                .connected(true)
+                .build();
+
+        Player player2 = Player.builder()
+                .id("p2")
+                .username("Player2")
+                .connected(true)
+                .build();
+
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(player1, player2)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act: Player1 disconnects (player2 remains)
+        roomService.markPlayerDisconnected("TEST", "p1");
+
+        // Assert: Room should still exist
+        verify(roomRepository, never()).deleteById("TEST");
+        assertThat(mockRoom.getPlayers()).hasSize(1);
+        assertThat(mockRoom.getPlayers()).contains(player2);
+    }
 }

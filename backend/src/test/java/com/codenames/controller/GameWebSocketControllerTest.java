@@ -289,4 +289,254 @@ class GameWebSocketControllerTest {
         assertThat(errorMsg).contains("\"type\":\"ERROR\"");
         assertThat(errorMsg).contains("\"message\"");
     }
+
+    // ========== PLAYER_UPDATED EVENT TESTS ==========
+
+    @Test
+    void shouldReceivePlayerUpdatedEventWhenChangingTeam() throws Exception {
+        // Arrange: Create room and join with player
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> privateMessages = new LinkedBlockingQueue<>();
+        BlockingQueue<String> broadcastMessages = new LinkedBlockingQueue<>();
+
+        // Subscribe to private queue for ROOM_STATE after join
+        session.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                privateMessages.add(message);
+            }
+        });
+
+        // Subscribe to room topic for broadcasts
+        session.subscribe("/topic/room/" + roomId, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                broadcastMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000); // Ensure subscriptions are registered
+
+        // Act: Join room first
+        session.send("/app/room/" + roomId + "/join", Map.of("username", "Player1"));
+
+        // Wait for join to complete
+        String joinBroadcast = broadcastMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(joinBroadcast).contains("PLAYER_JOINED");
+
+        String roomState = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(roomState).contains("ROOM_STATE");
+
+        // Act: Change team
+        session.send("/app/room/" + roomId + "/team",
+                Map.of("team", "BLUE", "role", "OPERATIVE"));
+
+        // Assert: Verify PLAYER_UPDATED event received
+        String updateMessage = broadcastMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(updateMessage).isNotNull();
+        assertThat(updateMessage).contains("\"type\":\"PLAYER_UPDATED\"");
+        assertThat(updateMessage).contains("\"team\":\"BLUE\"");
+        assertThat(updateMessage).contains("\"role\":\"OPERATIVE\"");
+    }
+
+    @Test
+    void shouldRejectSpymasterIfAlreadyExistsOnTeam() throws Exception {
+        // Arrange: Create room with existing Blue Spymaster
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+        roomService.joinRoom(roomId, "BlueSpymaster");
+        roomService.changePlayerTeam(roomId,
+                room.getPlayers().get(1).getId(), // Get second player (not admin)
+                com.codenames.model.Team.BLUE,
+                com.codenames.model.Role.SPYMASTER);
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> privateMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                privateMessages.add(message);
+            }
+        });
+
+        session.subscribe("/topic/room/" + roomId, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                // Consume broadcasts
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Join as new player
+        session.send("/app/room/" + roomId + "/join", Map.of("username", "Player2"));
+
+        // Wait for join to complete and consume ROOM_STATE from join
+        String roomStateFromJoin = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(roomStateFromJoin).isNotNull();
+        assertThat(roomStateFromJoin).contains("\"type\":\"ROOM_STATE\"");
+
+        // Act: Try to become Blue Spymaster (should fail)
+        session.send("/app/room/" + roomId + "/team",
+                Map.of("team", "BLUE", "role", "SPYMASTER"));
+
+        // Assert: Verify ERROR event received
+        String errorMsg = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(errorMsg).isNotNull();
+        assertThat(errorMsg).contains("\"type\":\"ERROR\"");
+        assertThat(errorMsg).contains("already has a spymaster");
+    }
+
+    @Test
+    void shouldAllowSpectatorMode() throws Exception {
+        // Test that player can become spectator (team = null, role = SPECTATOR)
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> broadcastMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                // Consume private messages
+            }
+        });
+
+        session.subscribe("/topic/room/" + roomId, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                broadcastMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Join room
+        session.send("/app/room/" + roomId + "/join", Map.of("username", "Player1"));
+        broadcastMessages.poll(10, TimeUnit.SECONDS); // Consume PLAYER_JOINED
+
+        // Act: Become spectator
+        session.send("/app/room/" + roomId + "/team",
+                Map.of("role", "SPECTATOR")); // team = null (omitted)
+
+        // Assert: Verify PLAYER_UPDATED with null team
+        String updateMessage = broadcastMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(updateMessage).isNotNull();
+        assertThat(updateMessage).contains("\"type\":\"PLAYER_UPDATED\"");
+        assertThat(updateMessage).contains("\"role\":\"SPECTATOR\"");
+    }
+
+    // ========== DISCONNECT HANDLING TESTS ==========
+
+    @Test
+    void shouldBroadcastPlayerLeftEventOnDisconnect() throws Exception {
+        // Arrange: Create room with two players
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+
+        StompSession session1 = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+        StompSession session2 = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> session2Messages = new LinkedBlockingQueue<>();
+
+        // Session 2 subscribes to room
+        session2.subscribe("/topic/room/" + roomId, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                session2Messages.add(message);
+            }
+        });
+
+        session1.subscribe("/topic/room/" + roomId, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                // Consume
+            }
+        });
+
+        session1.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                // Consume
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Both join
+        session1.send("/app/room/" + roomId + "/join", Map.of("username", "Player1"));
+        Thread.sleep(500);
+        session2Messages.poll(10, TimeUnit.SECONDS); // Consume Player1 joined
+
+        // Act: Session 1 disconnects
+        session1.disconnect();
+
+        // Assert: Session 2 receives PLAYER_LEFT event
+        String leftMessage = session2Messages.poll(10, TimeUnit.SECONDS);
+        assertThat(leftMessage).isNotNull();
+        assertThat(leftMessage).contains("\"type\":\"PLAYER_LEFT\"");
+    }
 }

@@ -601,6 +601,141 @@
 						}
 					],
 					"description": "Complete flow: Create room and add multiple players"
+				},
+				{
+					"name": "Scenario 2: WebSocket Team Management & Disconnect",
+					"item": [
+						{
+							"name": "2.1 Create New Room for WS Tests",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Room created for WebSocket tests\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    pm.collectionVariables.set(\"wsTestRoomId\", jsonData.roomId);",
+											"    pm.collectionVariables.set(\"wsAdminId\", jsonData.players[0].id);",
+											"    console.log(\"✅ WebSocket Test Room ID: \" + jsonData.roomId);",
+											"    console.log(\"✅ Admin ID: \" + jsonData.players[0].id);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"WSAdmin\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms"
+									]
+								},
+								"description": "Create a new room for WebSocket testing"
+							},
+							"response": []
+						},
+						{
+							"name": "2.2 Add Player via REST",
+							"event": [
+								{
+									"listen": "test",
+									"script": {
+										"exec": [
+											"pm.test(\"Player added\", function () {",
+											"    pm.response.to.have.status(201);",
+											"    var jsonData = pm.response.json();",
+											"    var player = jsonData.players.find(p => p.username === 'WSPlayer1');",
+											"    pm.collectionVariables.set(\"wsPlayer1Id\", player.id);",
+											"    console.log(\"✅ Player1 ID: \" + player.id);",
+											"});"
+										],
+										"type": "text/javascript"
+									}
+								}
+							],
+							"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n    \"username\": \"WSPlayer1\"\n}"
+								},
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{wsTestRoomId}}/join",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{wsTestRoomId}}",
+										"join"
+									]
+								},
+								"description": "Add a player via REST API"
+							},
+							"response": []
+						},
+						{
+							"name": "WebSocket Testing Instructions",
+							"request": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{baseUrl}}/api/rooms/{{wsTestRoomId}}",
+									"host": [
+										"{{baseUrl}}"
+									],
+									"path": [
+										"api",
+										"rooms",
+										"{{wsTestRoomId}}"
+									]
+								},
+								"description": "**WebSocket Testing Manual Guide**\n\n## Setup\n1. Use a WebSocket client (Postman WebSocket, online tools, or browser console)\n2. Connect to: `ws://localhost:8080/ws`\n3. Use STOMP protocol over SockJS\n4. Room ID: {{wsTestRoomId}}\n\n## Test 1: Join Room via WebSocket\n\n**Subscribe to:**\n- `/topic/room/{{wsTestRoomId}}` (for broadcasts)\n- `/user/queue/private` (for private messages)\n\n**Send to:** `/app/room/{{wsTestRoomId}}/join`\n\n**Payload:**\n```json\n{\"username\": \"WSPlayer2\"}\n```\n\n**Expected:**\n- PLAYER_JOINED event broadcast to all\n- ROOM_STATE event sent privately to joining player\n\n## Test 2: Change Team to Blue Operative\n\n**Send to:** `/app/room/{{wsTestRoomId}}/team`\n\n**Payload:**\n```json\n{\"team\": \"BLUE\", \"role\": \"OPERATIVE\"}\n```\n\n**Expected:**\n- PLAYER_UPDATED event broadcast with team=BLUE, role=OPERATIVE\n- ROOM_STATE event broadcast to all players\n\n## Test 3: Change Team to Blue Spymaster\n\n**Send to:** `/app/room/{{wsTestRoomId}}/team`\n\n**Payload:**\n```json\n{\"team\": \"BLUE\", \"role\": \"SPYMASTER\"}\n```\n\n**Expected:**\n- PLAYER_UPDATED event broadcast with team=BLUE, role=SPYMASTER\n- ROOM_STATE event broadcast to all players\n\n## Test 4: Try Duplicate Spymaster (Should Fail)\n\n**Prerequisites:** Have another player try to become Blue Spymaster\n\n**Send to:** `/app/room/{{wsTestRoomId}}/team`\n\n**Payload:**\n```json\n{\"team\": \"BLUE\", \"role\": \"SPYMASTER\"}\n```\n\n**Expected:**\n- ERROR event sent privately to requesting player\n- Message: \"Team BLUE already has a spymaster\"\n\n## Test 5: Become Spectator\n\n**Send to:** `/app/room/{{wsTestRoomId}}/team`\n\n**Payload:**\n```json\n{\"role\": \"SPECTATOR\"}\n```\n\n**Note:** team is null/omitted for spectator\n\n**Expected:**\n- PLAYER_UPDATED event with team=null, role=SPECTATOR\n- ROOM_STATE event broadcast to all players\n\n## Test 6: Disconnect Handling\n\n**Action:** Close the WebSocket connection\n\n**Expected:**\n- PLAYER_LEFT event broadcast to remaining players\n- Player removed from room\n- If last player, room is deleted\n\n## Event Types Reference\n\n**PLAYER_JOINED:**\n```json\n{\"type\":\"PLAYER_JOINED\",\"playerId\":\"...\",\"username\":\"...\"}\n```\n\n**PLAYER_UPDATED:**\n```json\n{\"type\":\"PLAYER_UPDATED\",\"playerId\":\"...\",\"team\":\"BLUE\",\"role\":\"OPERATIVE\"}\n```\n\n**PLAYER_LEFT:**\n```json\n{\"type\":\"PLAYER_LEFT\",\"playerId\":\"...\"}\n```\n\n**ROOM_STATE:**\n```json\n{\"type\":\"ROOM_STATE\",\"players\":[...],\"settings\":{...},\"canStart\":false}\n```\n\n**ERROR:**\n```json\n{\"type\":\"ERROR\",\"message\":\"...\"}\n```"
+							},
+							"response": []
+						}
+					],
+					"description": "Complete WebSocket flow: Team management, validation, and disconnect handling",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"console.log(\"=== Scenario 2: WebSocket Team Management & Disconnect ===\");",
+									"console.log(\"Room ID: \" + pm.collectionVariables.get(\"wsTestRoomId\"));",
+									"console.log(\"WebSocket URL: ws://localhost:8080/ws\");",
+									"console.log(\"\");",
+									"console.log(\"Use the 'WebSocket Testing Instructions' request for detailed steps\");",
+									"console.log(\"\");"
+								]
+							}
+						}
+					]
 				}
 			],
 			"description": "End-to-end integration test scenarios"
@@ -649,6 +784,21 @@
 		},
 		{
 			"key": "scenarioRoomId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "wsTestRoomId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "wsAdminId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "wsPlayer1Id",
 			"value": "",
 			"type": "string"
 		}

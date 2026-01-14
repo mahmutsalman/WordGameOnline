@@ -2,6 +2,9 @@ package com.codenames.controller;
 
 import com.codenames.dto.events.ErrorEvent;
 import com.codenames.dto.events.PlayerJoinedEvent;
+import com.codenames.dto.events.PlayerLeftEvent;
+import com.codenames.dto.events.PlayerUpdatedEvent;
+import com.codenames.dto.request.ChangeTeamRequest;
 import com.codenames.dto.request.JoinRoomWsRequest;
 import com.codenames.model.Player;
 import com.codenames.model.Room;
@@ -77,6 +80,41 @@ public class GameWebSocketController {
         }
     }
 
+    /**
+     * Handle player changing team/role via WebSocket.
+     * Broadcasts PLAYER_UPDATED and ROOM_STATE to all room subscribers.
+     *
+     * @param roomId the room ID
+     * @param request the change team request containing team and role
+     * @param headerAccessor WebSocket session header accessor
+     */
+    @MessageMapping("/room/{roomId}/team")
+    public void changeTeam(
+            @DestinationVariable String roomId,
+            @Valid @Payload ChangeTeamRequest request,
+            SimpMessageHeaderAccessor headerAccessor) {
+
+        String playerId = (String) headerAccessor.getSessionAttributes().get("playerId");
+        log.info("Change team request: roomId={}, playerId={}, team={}, role={}",
+                roomId, playerId, request.getTeam(), request.getRole());
+
+        try {
+            Room room = roomService.changePlayerTeam(roomId, playerId, request.getTeam(), request.getRole());
+
+            Player player = room.getPlayer(playerId)
+                    .orElseThrow(() -> new IllegalStateException("Player not found"));
+
+            // Broadcast update to all
+            broadcastPlayerUpdated(roomId, player);
+            broadcastRoomState(roomId, room);
+
+        } catch (Exception e) {
+            log.error("Change team failed: roomId={}, playerId={}, error={}",
+                    roomId, playerId, e.getMessage());
+            sendErrorToUser(headerAccessor.getSessionId(), e.getMessage());
+        }
+    }
+
     // ========== BROADCAST METHODS ==========
 
     /**
@@ -102,6 +140,42 @@ public class GameWebSocketController {
                 .playerId(player.getId())
                 .username(player.getUsername())
                 .build());
+    }
+
+    /**
+     * Broadcast PLAYER_UPDATED event to room.
+     *
+     * @param roomId the room ID
+     * @param player the player that was updated
+     */
+    private void broadcastPlayerUpdated(String roomId, Player player) {
+        broadcastToRoom(roomId, PlayerUpdatedEvent.builder()
+                .playerId(player.getId())
+                .team(player.getTeam())
+                .role(player.getRole())
+                .build());
+    }
+
+    /**
+     * Broadcast PLAYER_LEFT event to room.
+     *
+     * @param roomId the room ID
+     * @param playerId the ID of the player that left
+     */
+    private void broadcastPlayerLeft(String roomId, String playerId) {
+        broadcastToRoom(roomId, PlayerLeftEvent.builder()
+                .playerId(playerId)
+                .build());
+    }
+
+    /**
+     * Broadcast ROOM_STATE event to room.
+     *
+     * @param roomId the room ID
+     * @param room the room to send state for
+     */
+    private void broadcastRoomState(String roomId, Room room) {
+        broadcastToRoom(roomId, roomService.toRoomState(room));
     }
 
     // ========== PRIVATE MESSAGE METHODS ==========

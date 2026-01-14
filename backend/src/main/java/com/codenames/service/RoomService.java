@@ -3,11 +3,15 @@ package com.codenames.service;
 import com.codenames.dto.events.RoomStateEvent;
 import com.codenames.dto.response.PlayerResponse;
 import com.codenames.dto.response.RoomResponse;
+import com.codenames.exception.PlayerNotFoundException;
 import com.codenames.exception.RoomNotFoundException;
+import com.codenames.exception.SpymasterAlreadyExistsException;
 import com.codenames.exception.UsernameAlreadyExistsException;
 import com.codenames.factory.RoomFactory;
 import com.codenames.model.Player;
+import com.codenames.model.Role;
 import com.codenames.model.Room;
+import com.codenames.model.Team;
 import com.codenames.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -160,6 +164,66 @@ public class RoomService {
                 .settings(room.getSettings())
                 .canStart(room.canStart())
                 .build();
+    }
+
+    /**
+     * Changes a player's team and role.
+     * Validates that only one spymaster exists per team.
+     *
+     * @param roomId the room ID
+     * @param playerId the player ID to update
+     * @param team the new team (can be null for spectator)
+     * @param role the new role
+     * @return the updated room
+     * @throws PlayerNotFoundException if the player doesn't exist
+     * @throws SpymasterAlreadyExistsException if trying to set a second spymaster on a team
+     */
+    public Room changePlayerTeam(String roomId, String playerId, Team team, Role role) {
+        Room room = getRoom(roomId);
+        Player player = room.getPlayer(playerId)
+                .orElseThrow(() -> new PlayerNotFoundException(playerId));
+
+        // Validate: only one spymaster per team
+        if (role == Role.SPYMASTER && team != null) {
+            boolean spymasterExists = room.getPlayers().stream()
+                    .anyMatch(p -> !p.getId().equals(playerId)
+                            && p.getTeam() == team
+                            && p.getRole() == Role.SPYMASTER);
+            if (spymasterExists) {
+                throw new SpymasterAlreadyExistsException(team);
+            }
+        }
+
+        // Set team and role
+        player.setTeam(team);
+        player.setRole(team == null ? Role.SPECTATOR : role);
+
+        log.info("Player team changed: playerId={}, team={}, role={}", playerId, team, role);
+        return room;
+    }
+
+    /**
+     * Marks a player as disconnected and removes them from the room.
+     * If the room becomes empty, it is automatically deleted.
+     *
+     * @param roomId the room ID
+     * @param playerId the player ID to mark as disconnected
+     */
+    public void markPlayerDisconnected(String roomId, String playerId) {
+        Room room = getRoom(roomId);
+        room.getPlayer(playerId).ifPresent(p -> {
+            log.info("Marking player disconnected: playerId={}, roomId={}", playerId, roomId);
+            p.setConnected(false);
+        });
+
+        // Remove player immediately (could add timeout logic later)
+        room.getPlayers().removeIf(p -> p.getId().equals(playerId));
+
+        // Delete empty rooms
+        if (room.getPlayers().isEmpty()) {
+            log.info("Deleting empty room: roomId={}", roomId);
+            roomRepository.deleteById(roomId);
+        }
     }
 
     /**
