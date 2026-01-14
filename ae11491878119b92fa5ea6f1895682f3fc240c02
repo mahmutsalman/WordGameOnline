@@ -1,0 +1,29 @@
+Postmortem / extended notes
+
+Why this milestone exists
+- The JPA/H2 migration changed persistence semantics and exposed lifecycle bugs across REST + WebSocket flows.
+
+Symptoms observed
+- Creator: POST /api/rooms succeeded, then WS reconnect failed with "Room not found".
+- Joiner: client entered an infinite connect/join loop -> hundreds of duplicate players.
+
+Fix strategy
+- Make backend room mutations transactional and flush create; stop deleting rooms on disconnect; make reconnect mark player connected.
+- Make WS join/reconnect idempotent per session and avoid duplicate join publishes on transport reconnect.
+- Fix frontend effect dependencies and add presence logic (join vs reconnect) so we publish exactly once.
+- Stabilize tests by switching test profile to in-memory H2 (avoids file locking across Spring contexts).
+
+How to view
+- Tag notes: git show milestone/ws-jpa-stability
+- Commit notes: git log -1 --show-notes / git notes show HEAD
+
+Related tests
+- backend/src/test/java/com/codenames/controller/GameWebSocketControllerTest.java
+- backend/src/test/java/com/codenames/service/RoomServiceTest.java
+- backend/src/test/java/com/codenames/repository/RoomRepositoryTest.java
+- backend/src/test/java/com/codenames/controller/RoomControllerIntTest.java
+- backend/src/test/java/com/codenames/listener/WebSocketEventListenerTest.java
+- backend/src/test/java/com/codenames/repository/WordRepositoryTest.java
+- frontend/src/pages/__tests__/HomePage.test.tsx
+- frontend/src/services/__tests__/api.test.ts
+- frontend/src/store/__tests__/roomStore.test.ts
