@@ -54,7 +54,7 @@ class RoomServiceTest {
 
         when(roomFactory.create(anyString(), eq("Player1")))
                 .thenReturn(mockRoom);
-        when(roomRepository.save(any(Room.class)))
+        when(roomRepository.saveAndFlush(any(Room.class)))
                 .thenReturn(mockRoom);
 
         // Act
@@ -63,7 +63,7 @@ class RoomServiceTest {
         // Assert
         assertThat(result.getRoomId()).isEqualTo("TEST-ROOM");
         verify(roomFactory).create(anyString(), eq("Player1"));
-        verify(roomRepository).save(mockRoom);
+        verify(roomRepository).saveAndFlush(mockRoom);
     }
 
     @Test
@@ -71,7 +71,7 @@ class RoomServiceTest {
         // Arrange
         Room mockRoom = Room.builder().roomId("TEST").build();
         when(roomFactory.create(anyString(), anyString())).thenReturn(mockRoom);
-        when(roomRepository.save(any())).thenReturn(mockRoom);
+        when(roomRepository.saveAndFlush(any())).thenReturn(mockRoom);
 
         // Act
         roomService.createRoom("User");
@@ -85,13 +85,13 @@ class RoomServiceTest {
         // Arrange
         Room mockRoom = Room.builder().roomId("TEST").build();
         when(roomFactory.create(anyString(), anyString())).thenReturn(mockRoom);
-        when(roomRepository.save(any())).thenReturn(mockRoom);
+        when(roomRepository.saveAndFlush(any())).thenReturn(mockRoom);
 
         // Act
         roomService.createRoom("User");
 
         // Assert
-        verify(roomRepository, times(1)).save(mockRoom);
+        verify(roomRepository, times(1)).saveAndFlush(mockRoom);
     }
 
     @Test
@@ -102,7 +102,7 @@ class RoomServiceTest {
                 .adminId("admin-1")
                 .build();
         when(roomFactory.create(anyString(), anyString())).thenReturn(mockRoom);
-        when(roomRepository.save(any())).thenReturn(mockRoom);
+        when(roomRepository.saveAndFlush(any())).thenReturn(mockRoom);
 
         // Act
         Room result = roomService.createRoom("Admin");
@@ -538,14 +538,14 @@ class RoomServiceTest {
         // Act
         roomService.markPlayerDisconnected("TEST", "p1");
 
-        // Assert: Player should be removed from room
-        assertThat(mockRoom.getPlayer("p1")).isEmpty();
-        assertThat(mockRoom.getPlayers()).hasSize(1);
-        assertThat(mockRoom.getPlayers()).contains(player2);
+        // Assert: Player should remain but be marked disconnected
+        assertThat(mockRoom.getPlayer("p1")).isPresent();
+        assertThat(mockRoom.getPlayer("p1").get().isConnected()).isFalse();
+        assertThat(mockRoom.getPlayers()).hasSize(2);
     }
 
     @Test
-    void shouldDeleteRoomWhenLastPlayerDisconnects() {
+    void shouldNotDeleteRoomWhenLastPlayerDisconnects() {
         // Arrange: Create room with only one player
         Player lastPlayer = Player.builder()
                 .id("p1")
@@ -563,8 +563,10 @@ class RoomServiceTest {
         // Act: Last player disconnects
         roomService.markPlayerDisconnected("TEST", "p1");
 
-        // Assert: Room should be deleted
-        verify(roomRepository).deleteById("TEST");
+        // Assert: Room should not be deleted (player can reconnect)
+        verify(roomRepository, never()).deleteById("TEST");
+        assertThat(mockRoom.getPlayer("p1")).isPresent();
+        assertThat(mockRoom.getPlayer("p1").get().isConnected()).isFalse();
     }
 
     @Test
@@ -594,7 +596,10 @@ class RoomServiceTest {
 
         // Assert: Room should still exist
         verify(roomRepository, never()).deleteById("TEST");
-        assertThat(mockRoom.getPlayers()).hasSize(1);
-        assertThat(mockRoom.getPlayers()).contains(player2);
+        assertThat(mockRoom.getPlayers()).hasSize(2);
+        assertThat(mockRoom.getPlayer("p1")).isPresent();
+        assertThat(mockRoom.getPlayer("p1").get().isConnected()).isFalse();
+        assertThat(mockRoom.getPlayer("p2")).isPresent();
+        assertThat(mockRoom.getPlayer("p2").get().isConnected()).isTrue();
     }
 }

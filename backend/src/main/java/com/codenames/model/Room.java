@@ -1,59 +1,80 @@
 package com.codenames.model;
 
+import jakarta.persistence.CollectionTable;
+import jakarta.persistence.Column;
+import jakarta.persistence.ElementCollection;
+import jakarta.persistence.Embedded;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.stream.Collectors;
 
 /**
  * Model representing a game room in Codenames.
  * A room contains players, game settings, and can transition from lobby to active game.
- * Uses thread-safe collections for concurrent access.
+ * JPA Entity - persisted to H2 database for durability across restarts.
  */
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
+@Entity
+@Table(name = "rooms")
 public class Room {
     /**
      * Unique room identifier (format: XXXXX-XXXXX).
      */
+    @Id
+    @Column(nullable = false, length = 11)
     private String roomId;
 
     /**
      * ID of the player who created the room (admin).
      */
+    @Column(nullable = false)
     private String adminId;
 
     /**
      * Timestamp when the room was created.
      */
+    @Column(nullable = false)
     private LocalDateTime createdAt;
 
     /**
      * Game configuration settings.
      * Defaults to new GameSettings instance with default values.
      */
+    @Embedded
     @Builder.Default
     private GameSettings settings = new GameSettings();
 
     /**
      * List of players in the room.
-     * Uses CopyOnWriteArrayList for thread-safe concurrent access.
+     * Stored as an element collection in a separate table.
+     * Eagerly fetched to avoid lazy loading issues in WebSocket context.
      * Defaults to empty list.
      */
+    @ElementCollection(fetch = jakarta.persistence.FetchType.EAGER)
+    @CollectionTable(name = "room_players", joinColumns = @JoinColumn(name = "room_id"))
     @Builder.Default
-    private List<Player> players = new CopyOnWriteArrayList<>();
+    private List<Player> players = new ArrayList<>();
 
     /**
      * Current game state (null when in lobby, before game starts).
+     * Not persisted - will be typed as GameState in later steps.
      */
+    @Transient
     private Object gameState;  // Will be typed as GameState in later steps
 
     /**

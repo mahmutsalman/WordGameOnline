@@ -16,6 +16,7 @@ import com.codenames.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.UUID;
@@ -28,6 +29,7 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 @Slf4j
+@Transactional
 public class RoomService {
 
     private final RoomRepository roomRepository;
@@ -45,7 +47,7 @@ public class RoomService {
         log.info("Creating room with admin: {} (ID: {})", username, playerId);
 
         Room room = roomFactory.create(playerId, username);
-        Room savedRoom = roomRepository.save(room);
+        Room savedRoom = roomRepository.saveAndFlush(room);
 
         log.info("Room created successfully: {}", savedRoom.getRoomId());
         return savedRoom;
@@ -90,6 +92,7 @@ public class RoomService {
      * @return the room
      * @throws RoomNotFoundException if the room doesn't exist
      */
+    @Transactional(readOnly = true)
     public Room getRoom(String roomId) {
         return roomRepository.findById(roomId)
                 .orElseThrow(() -> new RoomNotFoundException(roomId));
@@ -101,6 +104,7 @@ public class RoomService {
      * @param roomId the room ID to check
      * @return true if the room exists, false otherwise
      */
+    @Transactional(readOnly = true)
     public boolean roomExists(String roomId) {
         return roomRepository.existsById(roomId);
     }
@@ -212,18 +216,27 @@ public class RoomService {
     public void markPlayerDisconnected(String roomId, String playerId) {
         Room room = getRoom(roomId);
         room.getPlayer(playerId).ifPresent(p -> {
-            log.info("Marking player disconnected: playerId={}, roomId={}", playerId, roomId);
+            if (p.isConnected()) {
+                log.info("Marking player disconnected: playerId={}, roomId={}", playerId, roomId);
+            }
             p.setConnected(false);
         });
+    }
 
-        // Remove player immediately (could add timeout logic later)
-        room.getPlayers().removeIf(p -> p.getId().equals(playerId));
-
-        // Delete empty rooms
-        if (room.getPlayers().isEmpty()) {
-            log.info("Deleting empty room: roomId={}", roomId);
-            roomRepository.deleteById(roomId);
-        }
+    /**
+     * Marks an existing player as connected again (reconnect flow).
+     *
+     * @param roomId the room ID
+     * @param playerId the player ID to reconnect
+     * @return the updated room
+     * @throws PlayerNotFoundException if the player doesn't exist
+     */
+    public Room reconnectPlayer(String roomId, String playerId) {
+        Room room = getRoom(roomId);
+        Player player = room.getPlayer(playerId)
+                .orElseThrow(() -> new PlayerNotFoundException(playerId));
+        player.setConnected(true);
+        return room;
     }
 
     /**

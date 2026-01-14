@@ -50,15 +50,15 @@ export interface TurnHistory {
   guesses: string[];
 }
 
-// Player interface
+// Player interface (matches backend Player entity)
 export interface Player {
   id: string;
   username: string;
   avatar: string;
-  team: Team | 'SPECTATOR';
+  team: Team | null;  // null for spectators
   role: Role;
-  isConnected: boolean;
-  isAdmin: boolean;
+  connected: boolean;
+  admin: boolean;
 }
 
 // Game settings interface
@@ -77,7 +77,71 @@ export interface Room {
   gameState: GameState | null;
 }
 
-// WebSocket message types
+// WebSocket connection status
+export type ConnectionStatus =
+  | 'DISCONNECTED'
+  | 'CONNECTING'
+  | 'CONNECTED'
+  | 'RECONNECTING'
+  | 'ERROR';
+
+// Base WebSocket event interface
+export interface BaseWSEvent {
+  type: string;
+}
+
+// WebSocket Event Types (matching backend DTOs)
+
+export interface PlayerJoinedEvent extends BaseWSEvent {
+  type: 'PLAYER_JOINED';
+  playerId: string;
+  username: string;
+}
+
+export interface PlayerLeftEvent extends BaseWSEvent {
+  type: 'PLAYER_LEFT';
+  playerId: string;
+}
+
+export interface PlayerUpdatedEvent extends BaseWSEvent {
+  type: 'PLAYER_UPDATED';
+  playerId: string;
+  team: Team | null;
+  role: Role;
+}
+
+export interface RoomStateEvent extends BaseWSEvent {
+  type: 'ROOM_STATE';
+  players: Player[];
+  settings: GameSettings;
+  canStart: boolean;
+}
+
+export interface ErrorEvent extends BaseWSEvent {
+  type: 'ERROR';
+  message: string;
+}
+
+// Union type for all WebSocket events
+export type WSEvent =
+  | PlayerJoinedEvent
+  | PlayerLeftEvent
+  | PlayerUpdatedEvent
+  | RoomStateEvent
+  | ErrorEvent;
+
+// WebSocket Request Types (matching backend request DTOs)
+
+export interface JoinRoomWsRequest {
+  username: string;
+}
+
+export interface ChangeTeamRequest {
+  team?: Team | null;
+  role: Role;
+}
+
+// Legacy WebSocket message interface (kept for compatibility)
 export interface WebSocketMessage<T = unknown> {
   event: string;
   data: T;

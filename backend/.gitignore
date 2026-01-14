@@ -43,3 +43,6 @@ mvnw.cmd
 ### OS Files ###
 .DS_Store
 Thumbs.db
+
+### Local H2 database (file-based persistence) ###
+data/

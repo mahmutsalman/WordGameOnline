@@ -41,12 +41,19 @@ export default function HomePage() {
     try {
       const room = await createRoom({ username: createUsername.trim() });
 
-      // Update store with room and current player (admin)
+      // Store room and player data from REST API
       setRoom(room);
       const adminPlayer = room.players.find((p) => p.admin);
       if (adminPlayer) {
         setCurrentPlayer(adminPlayer);
+        // Save playerId for WebSocket session identification
+        sessionStorage.setItem('playerId', adminPlayer.id);
       }
+
+      // Save username and roomId for WebSocket
+      sessionStorage.setItem('username', createUsername.trim());
+      sessionStorage.setItem('roomId', room.roomId);
+      sessionStorage.setItem('isCreator', 'true');
 
       // Navigate to room page
       navigate(`/room/${room.roomId}`);
@@ -80,21 +87,15 @@ export default function HomePage() {
     setJoinLoading(true);
 
     try {
-      const room = await joinRoom(roomCode.trim().toUpperCase(), {
-        username: joinUsername.trim(),
-      });
+      const roomIdUpper = roomCode.trim().toUpperCase();
 
-      // Update store with room and current player
-      setRoom(room);
-      const currentPlayer = room.players.find(
-        (p) => p.username === joinUsername.trim()
-      );
-      if (currentPlayer) {
-        setCurrentPlayer(currentPlayer);
-      }
+      // Save username and roomId for WebSocket join
+      sessionStorage.setItem('username', joinUsername.trim());
+      sessionStorage.setItem('roomId', roomIdUpper);
+      sessionStorage.setItem('isCreator', 'false');
 
-      // Navigate to room page
-      navigate(`/room/${room.roomId}`);
+      // Navigate to room page - WebSocket will handle the join
+      navigate(`/room/${roomIdUpper}`);
     } catch (error) {
       console.error('Join room error:', error);
       setJoinError('Error joining room. Please check the room code and try again.');

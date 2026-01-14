@@ -21,6 +21,7 @@ vi.mock('react-router-dom', async () => {
 describe('HomePage', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
   });
 
   const renderHomePage = () => {
@@ -206,17 +207,7 @@ describe('HomePage', () => {
     });
   });
 
-  it('should call joinRoom API with valid inputs', async () => {
-    const mockRoom: RoomResponse = {
-      roomId: 'JOIN-TEST',
-      players: [],
-      settings: { wordPack: 'english', timerSeconds: null },
-      canStart: false,
-      adminId: 'admin-1',
-    };
-
-    vi.mocked(api.joinRoom).mockResolvedValueOnce(mockRoom);
-
+  it('should navigate and set sessionStorage after joining', async () => {
     renderHomePage();
 
     const usernameInputs = screen.getAllByPlaceholderText(/username/i);
@@ -229,23 +220,16 @@ describe('HomePage', () => {
     fireEvent.click(joinButton);
 
     await waitFor(() => {
-      expect(api.joinRoom).toHaveBeenCalledWith('TEST-ROOM', {
-        username: 'Player2',
-      });
+      expect(mockNavigate).toHaveBeenCalledWith('/room/TEST-ROOM');
     });
+
+    expect(api.joinRoom).not.toHaveBeenCalled();
+    expect(sessionStorage.getItem('username')).toBe('Player2');
+    expect(sessionStorage.getItem('roomId')).toBe('TEST-ROOM');
+    expect(sessionStorage.getItem('isCreator')).toBe('false');
   });
 
   it('should navigate to room after joining', async () => {
-    const mockRoom: RoomResponse = {
-      roomId: 'JOINED-ROOM',
-      players: [],
-      settings: { wordPack: 'english', timerSeconds: null },
-      canStart: false,
-      adminId: 'admin-1',
-    };
-
-    vi.mocked(api.joinRoom).mockResolvedValueOnce(mockRoom);
-
     renderHomePage();
 
     const usernameInputs = screen.getAllByPlaceholderText(/username/i);
@@ -262,61 +246,40 @@ describe('HomePage', () => {
     });
   });
 
-  it('should update store after joining', async () => {
-    const mockRoom: RoomResponse = {
-      roomId: 'STORE-JOIN',
-      players: [
-        {
-          id: 'p2',
-          username: 'JoinUser',
-          team: null,
-          role: 'SPECTATOR',
-          connected: true,
-          admin: false,
-        },
-      ],
-      settings: { wordPack: 'english', timerSeconds: null },
-      canStart: false,
-      adminId: 'p1',
-    };
-
-    vi.mocked(api.joinRoom).mockResolvedValueOnce(mockRoom);
-
+  it('should uppercase room code on join', async () => {
     renderHomePage();
 
     const usernameInputs = screen.getAllByPlaceholderText(/username/i);
     fireEvent.change(usernameInputs[1], { target: { value: 'JoinUser' } });
 
     const roomCodeInput = screen.getByPlaceholderText(/room code/i);
-    fireEvent.change(roomCodeInput, { target: { value: 'STORE-JOIN' } });
+    fireEvent.change(roomCodeInput, { target: { value: 'abcd1-efg23' } });
 
     const joinButton = screen.getByRole('button', { name: /join room/i });
     fireEvent.click(joinButton);
 
     await waitFor(() => {
-      expect(api.joinRoom).toHaveBeenCalled();
+      expect(mockNavigate).toHaveBeenCalledWith('/room/ABCD1-EFG23');
     });
+    expect(sessionStorage.getItem('roomId')).toBe('ABCD1-EFG23');
   });
 
-  it('should show error message on join failure', async () => {
-    vi.mocked(api.joinRoom).mockRejectedValueOnce(
-      new Error('{"error": "Room not found"}')
-    );
-
+  it('should not call joinRoom REST API when joining', async () => {
     renderHomePage();
 
     const usernameInputs = screen.getAllByPlaceholderText(/username/i);
     fireEvent.change(usernameInputs[1], { target: { value: 'Player2' } });
 
     const roomCodeInput = screen.getByPlaceholderText(/room code/i);
-    fireEvent.change(roomCodeInput, { target: { value: 'INVALID' } });
+    fireEvent.change(roomCodeInput, { target: { value: 'ABC12-DEF34' } });
 
     const joinButton = screen.getByRole('button', { name: /join room/i });
     fireEvent.click(joinButton);
 
     await waitFor(() => {
-      const errorMessage = screen.getByText(/error/i);
-      expect(errorMessage).toBeInTheDocument();
+      expect(mockNavigate).toHaveBeenCalledWith('/room/ABC12-DEF34');
     });
+
+    expect(api.joinRoom).not.toHaveBeenCalled();
   });
 });

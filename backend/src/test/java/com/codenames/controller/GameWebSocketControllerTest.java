@@ -361,9 +361,14 @@ class GameWebSocketControllerTest {
         // Arrange: Create room with existing Blue Spymaster
         Room room = roomService.createRoom("Admin");
         String roomId = room.getRoomId();
-        roomService.joinRoom(roomId, "BlueSpymaster");
+        Room roomWithSpymaster = roomService.joinRoom(roomId, "BlueSpymaster");
+        String blueSpymasterId = roomWithSpymaster.getPlayers().stream()
+                .filter(p -> "BlueSpymaster".equals(p.getUsername()))
+                .findFirst()
+                .orElseThrow()
+                .getId();
         roomService.changePlayerTeam(roomId,
-                room.getPlayers().get(1).getId(), // Get second player (not admin)
+                blueSpymasterId,
                 com.codenames.model.Team.BLUE,
                 com.codenames.model.Role.SPYMASTER);
 
@@ -469,6 +474,149 @@ class GameWebSocketControllerTest {
         assertThat(updateMessage).isNotNull();
         assertThat(updateMessage).contains("\"type\":\"PLAYER_UPDATED\"");
         assertThat(updateMessage).contains("\"role\":\"SPECTATOR\"");
+    }
+
+    // ========== RECONNECT PLAYER TESTS ==========
+
+    @Test
+    void shouldReconnectExistingPlayerAndStoreSessionPlayerId() throws Exception {
+        // Arrange: Create room via REST API (simulates creator flow)
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+        String playerId = room.getPlayers().get(0).getId(); // Admin player ID
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> privateMessages = new LinkedBlockingQueue<>();
+
+        // Subscribe to private queue to receive ROOM_STATE after reconnect
+        session.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                privateMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000); // Ensure subscription is registered
+
+        // Act: Send reconnect request
+        session.send("/app/room/" + roomId + "/reconnect",
+                Map.of("playerId", playerId));
+
+        // Assert: Should receive ROOM_STATE
+        String message = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(message).isNotNull();
+        assertThat(message).contains("\"type\":\"ROOM_STATE\"");
+        assertThat(message).contains("\"players\"");
+        assertThat(message).contains("\"settings\"");
+        assertThat(message).contains("\"canStart\"");
+    }
+
+    @Test
+    void shouldRejectReconnectForNonExistentPlayer() throws Exception {
+        // Arrange: Create room
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> privateMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                privateMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Try to reconnect with invalid playerId
+        session.send("/app/room/" + roomId + "/reconnect",
+                Map.of("playerId", "INVALID_PLAYER_ID"));
+
+        // Assert: Should receive ERROR
+        String errorMsg = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(errorMsg).isNotNull();
+        assertThat(errorMsg).contains("\"type\":\"ERROR\"");
+        assertThat(errorMsg).contains("Player not found");
+    }
+
+    @Test
+    void shouldAllowTeamChangeAfterReconnect() throws Exception {
+        // Arrange: Create room via REST API (simulates creator flow)
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+        String playerId = room.getPlayers().get(0).getId();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> privateMessages = new LinkedBlockingQueue<>();
+        BlockingQueue<String> broadcastMessages = new LinkedBlockingQueue<>();
+
+        // Subscribe to private queue
+        session.subscribe("/user/queue/private", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                privateMessages.add(message);
+            }
+        });
+
+        // Subscribe to room topic for broadcasts
+        session.subscribe("/topic/room/" + roomId, new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                broadcastMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Reconnect first
+        session.send("/app/room/" + roomId + "/reconnect",
+                Map.of("playerId", playerId));
+
+        // Wait for ROOM_STATE from reconnect
+        String roomState = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(roomState).contains("ROOM_STATE");
+
+        // Act: Change team (should work now because playerId is in session)
+        session.send("/app/room/" + roomId + "/team",
+                Map.of("team", "BLUE", "role", "OPERATIVE"));
+
+        // Assert: Should receive PLAYER_UPDATED broadcast
+        String updateMessage = broadcastMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(updateMessage).isNotNull();
+        assertThat(updateMessage).contains("\"type\":\"PLAYER_UPDATED\"");
+        assertThat(updateMessage).contains("\"team\":\"BLUE\"");
+        assertThat(updateMessage).contains("\"role\":\"OPERATIVE\"");
     }
 
     // ========== DISCONNECT HANDLING TESTS ==========

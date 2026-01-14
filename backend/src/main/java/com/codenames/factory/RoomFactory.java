@@ -7,9 +7,9 @@ import org.springframework.stereotype.Component;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Factory for creating Room and Player instances.
@@ -53,7 +53,7 @@ public class RoomFactory {
                 .adminId(adminId)
                 .createdAt(LocalDateTime.now())
                 .settings(new com.codenames.model.GameSettings())
-                .players(new CopyOnWriteArrayList<>(List.of(admin)))
+                .players(new ArrayList<>(List.of(admin)))
                 .build();
     }
 
