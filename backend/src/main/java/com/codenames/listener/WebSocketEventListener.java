@@ -1,6 +1,8 @@
 package com.codenames.listener;
 
 import com.codenames.dto.events.PlayerLeftEvent;
+import com.codenames.dto.events.RoomStateEvent;
+import com.codenames.model.Room;
 import com.codenames.service.RoomService;
 import com.codenames.service.WebSocketSessionManager;
 import lombok.RequiredArgsConstructor;
@@ -63,6 +65,16 @@ public class WebSocketEventListener {
                     "/topic/room/" + roomId,
                     PlayerLeftEvent.builder().playerId(playerId).build()
             );
+
+            // Broadcast updated room state (includes recalculated canStart)
+            Room room = roomService.getRoom(roomId);
+            RoomStateEvent roomState = roomService.toRoomState(room);
+            messagingTemplate.convertAndSend(
+                    "/topic/room/" + roomId,
+                    roomState
+            );
+            log.debug("Broadcast ROOM_STATE after disconnect: roomId={}, canStart={}",
+                    roomId, roomState.isCanStart());
         } catch (Exception e) {
             log.error("Error handling disconnect: playerId={}, roomId={}, error={}",
                     playerId, roomId, e.getMessage());

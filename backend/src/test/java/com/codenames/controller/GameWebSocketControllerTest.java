@@ -343,6 +343,10 @@ class GameWebSocketControllerTest {
         String joinBroadcast = broadcastMessages.poll(10, TimeUnit.SECONDS);
         assertThat(joinBroadcast).contains("PLAYER_JOINED");
 
+        // Consume the ROOM_STATE broadcast that follows PLAYER_JOINED
+        String joinRoomState = broadcastMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(joinRoomState).contains("ROOM_STATE");
+
         String roomState = privateMessages.poll(10, TimeUnit.SECONDS);
         assertThat(roomState).contains("ROOM_STATE");
 
@@ -466,6 +470,7 @@ class GameWebSocketControllerTest {
         // Join room
         session.send("/app/room/" + roomId + "/join", Map.of("username", "Player1"));
         broadcastMessages.poll(10, TimeUnit.SECONDS); // Consume PLAYER_JOINED
+        broadcastMessages.poll(10, TimeUnit.SECONDS); // Consume ROOM_STATE broadcast
 
         // Act: Become spectator
         session.send("/app/room/" + roomId + "/team",
@@ -605,7 +610,11 @@ class GameWebSocketControllerTest {
         session.send("/app/room/" + roomId + "/reconnect",
                 Map.of("playerId", playerId));
 
-        // Wait for ROOM_STATE from reconnect
+        // Wait for ROOM_STATE from reconnect (broadcast to all)
+        String broadcastRoomState = broadcastMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(broadcastRoomState).contains("ROOM_STATE");
+
+        // Wait for ROOM_STATE from reconnect (private to reconnecting player)
         String roomState = privateMessages.poll(10, TimeUnit.SECONDS);
         assertThat(roomState).contains("ROOM_STATE");
 
@@ -680,6 +689,7 @@ class GameWebSocketControllerTest {
         session1.send("/app/room/" + roomId + "/join", Map.of("username", "Player1"));
         Thread.sleep(500);
         session2Messages.poll(10, TimeUnit.SECONDS); // Consume Player1 joined
+        session2Messages.poll(10, TimeUnit.SECONDS); // Consume ROOM_STATE broadcast
 
         // Act: Session 1 disconnects
         session1.disconnect();

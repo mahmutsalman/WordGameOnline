@@ -256,14 +256,15 @@ class RoomTest {
     /**
      * Test that canStart() returns true with minimal required setup.
      * Requires: 1 Blue spymaster, 1 Red spymaster, 1 Blue operative, 1 Red operative.
+     * All players must be connected.
      */
     @Test
     void canStartShouldReturnTrueWithMinimalSetup() {
         // Arrange
-        Player blueSpymaster = Player.builder().id("1").team(Team.BLUE).role(Role.SPYMASTER).build();
-        Player redSpymaster = Player.builder().id("2").team(Team.RED).role(Role.SPYMASTER).build();
-        Player blueOperative = Player.builder().id("3").team(Team.BLUE).role(Role.OPERATIVE).build();
-        Player redOperative = Player.builder().id("4").team(Team.RED).role(Role.OPERATIVE).build();
+        Player blueSpymaster = Player.builder().id("1").team(Team.BLUE).role(Role.SPYMASTER).connected(true).build();
+        Player redSpymaster = Player.builder().id("2").team(Team.RED).role(Role.SPYMASTER).connected(true).build();
+        Player blueOperative = Player.builder().id("3").team(Team.BLUE).role(Role.OPERATIVE).connected(true).build();
+        Player redOperative = Player.builder().id("4").team(Team.RED).role(Role.OPERATIVE).connected(true).build();
 
         Room room = Room.builder()
                 .roomId("TEST")
@@ -283,16 +284,17 @@ class RoomTest {
 
     /**
      * Test that canStart() returns true with multiple operatives per team.
+     * All players must be connected.
      */
     @Test
     void canStartShouldReturnTrueWithMultipleOperatives() {
         // Arrange
-        Player blueSpymaster = Player.builder().id("1").team(Team.BLUE).role(Role.SPYMASTER).build();
-        Player redSpymaster = Player.builder().id("2").team(Team.RED).role(Role.SPYMASTER).build();
-        Player blueOp1 = Player.builder().id("3").team(Team.BLUE).role(Role.OPERATIVE).build();
-        Player blueOp2 = Player.builder().id("4").team(Team.BLUE).role(Role.OPERATIVE).build();
-        Player redOp1 = Player.builder().id("5").team(Team.RED).role(Role.OPERATIVE).build();
-        Player redOp2 = Player.builder().id("6").team(Team.RED).role(Role.OPERATIVE).build();
+        Player blueSpymaster = Player.builder().id("1").team(Team.BLUE).role(Role.SPYMASTER).connected(true).build();
+        Player redSpymaster = Player.builder().id("2").team(Team.RED).role(Role.SPYMASTER).connected(true).build();
+        Player blueOp1 = Player.builder().id("3").team(Team.BLUE).role(Role.OPERATIVE).connected(true).build();
+        Player blueOp2 = Player.builder().id("4").team(Team.BLUE).role(Role.OPERATIVE).connected(true).build();
+        Player redOp1 = Player.builder().id("5").team(Team.RED).role(Role.OPERATIVE).connected(true).build();
+        Player redOp2 = Player.builder().id("6").team(Team.RED).role(Role.OPERATIVE).connected(true).build();
 
         Room room = Room.builder()
                 .roomId("TEST")
@@ -308,6 +310,33 @@ class RoomTest {
         assertThat(canStart)
                 .as("Should be able to start with multiple operatives")
                 .isTrue();
+    }
+
+    /**
+     * Test that canStart() returns false when a required player is disconnected.
+     */
+    @Test
+    void canStartShouldReturnFalseWhenRequiredPlayerDisconnected() {
+        // Arrange - all players present but red spymaster is disconnected
+        Player blueSpymaster = Player.builder().id("1").team(Team.BLUE).role(Role.SPYMASTER).connected(true).build();
+        Player redSpymaster = Player.builder().id("2").team(Team.RED).role(Role.SPYMASTER).connected(false).build();
+        Player blueOperative = Player.builder().id("3").team(Team.BLUE).role(Role.OPERATIVE).connected(true).build();
+        Player redOperative = Player.builder().id("4").team(Team.RED).role(Role.OPERATIVE).connected(true).build();
+
+        Room room = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(List.of(
+                        blueSpymaster, redSpymaster, blueOperative, redOperative
+                )))
+                .build();
+
+        // Act
+        boolean canStart = room.canStart();
+
+        // Assert
+        assertThat(canStart)
+                .as("Cannot start when required player is disconnected")
+                .isFalse();
     }
 
     /**

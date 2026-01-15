@@ -103,26 +103,26 @@ public class Room {
 
     /**
      * Check if the game can be started.
-     * Requires:
+     * Requires connected players in these roles:
      * - At least one BLUE SPYMASTER
      * - At least one RED SPYMASTER
      * - At least one BLUE OPERATIVE
      * - At least one RED OPERATIVE
      *
-     * @return true if all required roles are filled, false otherwise
+     * @return true if all required roles are filled by connected players, false otherwise
      */
     public boolean canStart() {
         boolean hasBlueSpymaster = players.stream()
-                .anyMatch(p -> p.getTeam() == Team.BLUE && p.getRole() == Role.SPYMASTER);
+                .anyMatch(p -> p.isConnected() && p.getTeam() == Team.BLUE && p.getRole() == Role.SPYMASTER);
 
         boolean hasRedSpymaster = players.stream()
-                .anyMatch(p -> p.getTeam() == Team.RED && p.getRole() == Role.SPYMASTER);
+                .anyMatch(p -> p.isConnected() && p.getTeam() == Team.RED && p.getRole() == Role.SPYMASTER);
 
         boolean hasBlueOperative = players.stream()
-                .anyMatch(p -> p.getTeam() == Team.BLUE && p.getRole() == Role.OPERATIVE);
+                .anyMatch(p -> p.isConnected() && p.getTeam() == Team.BLUE && p.getRole() == Role.OPERATIVE);
 
         boolean hasRedOperative = players.stream()
-                .anyMatch(p -> p.getTeam() == Team.RED && p.getRole() == Role.OPERATIVE);
+                .anyMatch(p -> p.isConnected() && p.getTeam() == Team.RED && p.getRole() == Role.OPERATIVE);
 
         return hasBlueSpymaster && hasRedSpymaster && hasBlueOperative && hasRedOperative;
     }

@@ -142,7 +142,10 @@ public class GameWebSocketController {
                 // Broadcast to all players in room (Observer pattern - broadcast)
                 broadcastPlayerJoined(roomId, player);
 
-                // Send current room state to the new player privately
+                // Broadcast updated room state to ALL players (includes updated canStart)
+                broadcastRoomState(roomId, room);
+
+                // Also send room state to the new player privately (for immediate UI update)
                 sendRoomStateToUser(sessionId, room);
 
             } finally {
@@ -272,7 +275,10 @@ public class GameWebSocketController {
             // Register session with session manager
             sessionManager.registerSession(player.getId(), roomId, sessionId);
 
-            // Send current room state to reconnected player
+            // Broadcast updated room state to ALL players (includes updated canStart)
+            broadcastRoomState(roomId, room);
+
+            // Also send room state to reconnected player privately (for immediate UI update)
             sendRoomStateToUser(sessionId, room);
 
             log.info("Player reconnected successfully: {} (ID: {}) to room {}",
