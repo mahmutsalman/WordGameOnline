@@ -12,6 +12,8 @@ export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { room, currentPlayer, reset } = useRoomStore();
+  const canStart = room?.canStart ?? false;
+  const isAdmin = currentPlayer?.admin ?? false;
 
   // Get username from session storage (set during room creation/join)
   const username = sessionStorage.getItem('username') || 'Guest';
@@ -36,6 +38,15 @@ export default function RoomPage() {
   // Handle team/role change
   const handleTeamChange = (team: Team | null, role: Role) => {
     changeTeam(team, role);
+  };
+
+  // Handle game start
+  const handleStartGame = () => {
+    if (!canStart) {
+      return;
+    }
+    // TODO: Implement game start logic in Step-04
+    console.log('Starting game...');
   };
 
   // Connection status indicator
@@ -344,6 +355,28 @@ export default function RoomPage() {
             </div>
           </div>
         </div>
+
+        {/* Start Game Section - Admin Only */}
+        {isAdmin && (
+          <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
+            <button
+              onClick={handleStartGame}
+              disabled={!canStart}
+              className={`w-full px-6 py-3 rounded-lg text-lg font-semibold transition duration-200 ${
+                canStart
+                  ? 'bg-green-500 hover:bg-green-600 text-white'
+                  : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+              }`}
+            >
+              {canStart ? 'Start Game' : 'Waiting for Teams...'}
+            </button>
+            {!canStart && (
+              <p className="text-sm text-gray-600 text-center mt-2">
+                Need at least 4 players with 1 Spymaster per team
+              </p>
+            )}
+          </div>
+        )}
 
         {/* Action Button */}
         <div className="mt-6">
