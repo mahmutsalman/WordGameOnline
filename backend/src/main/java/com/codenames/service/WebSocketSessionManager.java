@@ -24,6 +24,10 @@ public class WebSocketSessionManager {
     // roomId -> set of playerIds
     private final Map<String, Set<String>> roomPlayers = new ConcurrentHashMap<>();
 
+    // sessionId -> disconnect timestamp (ms)
+    private static final long DISCONNECTED_SESSION_TTL_MS = 5 * 60 * 1000L;
+    private final Map<String, Long> disconnectedSessions = new ConcurrentHashMap<>();
+
     /**
      * Session information containing player, room, and WebSocket session IDs.
      */
@@ -114,5 +118,41 @@ public class WebSocketSessionManager {
      */
     public Set<String> getRoomPlayers(String roomId) {
         return roomPlayers.getOrDefault(roomId, Collections.emptySet());
+    }
+
+
+    /**
+     * Mark a session as disconnected.
+     * Used to detect disconnect events that can arrive before join/reconnect handlers complete.
+     *
+     * @param sessionId the WebSocket session ID
+     */
+    public void markSessionDisconnected(String sessionId) {
+        if (sessionId == null) {
+            return;
+        }
+
+        disconnectedSessions.put(sessionId, System.currentTimeMillis());
+        pruneDisconnectedSessions();
+    }
+
+    /**
+     * Returns true if the session was previously marked disconnected, and removes the marker.
+     *
+     * @param sessionId the WebSocket session ID
+     * @return true if the session was marked disconnected, false otherwise
+     */
+    public boolean consumeDisconnectedSession(String sessionId) {
+        if (sessionId == null) {
+            return false;
+        }
+
+        pruneDisconnectedSessions();
+        return disconnectedSessions.remove(sessionId) != null;
+    }
+
+    private void pruneDisconnectedSessions() {
+        long cutoff = System.currentTimeMillis() - DISCONNECTED_SESSION_TTL_MS;
+        disconnectedSessions.entrySet().removeIf(entry -> entry.getValue() < cutoff);
     }
 }

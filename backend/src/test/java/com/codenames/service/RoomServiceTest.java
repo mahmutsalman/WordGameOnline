@@ -174,6 +174,7 @@ class RoomServiceTest {
         Player existingPlayer = Player.builder()
                 .id("p1")
                 .username("ExistingUser")
+                .connected(true)
                 .build();
         Room mockRoom = Room.builder()
                 .roomId("TEST")
@@ -189,11 +190,37 @@ class RoomServiceTest {
     }
 
     @Test
+    void shouldAllowRejoinWhenUsernameExistsButPlayerDisconnected() {
+        // Arrange
+        Player existingPlayer = Player.builder()
+                .id("p1")
+                .username("ExistingUser")
+                .connected(false)
+                .build();
+        Room mockRoom = Room.builder()
+                .roomId("TEST")
+                .players(new CopyOnWriteArrayList<>(java.util.List.of(existingPlayer)))
+                .build();
+
+        when(roomRepository.findById("TEST")).thenReturn(Optional.of(mockRoom));
+
+        // Act
+        Room result = roomService.joinRoom("TEST", "ExistingUser");
+
+        // Assert
+        assertThat(result.getPlayers()).hasSize(1);
+        assertThat(existingPlayer.isConnected()).isTrue();
+        verify(roomFactory, never()).createPlayer(anyString());
+    }
+
+
+    @Test
     void shouldIgnoreCaseWhenCheckingUsername() {
         // Arrange
         Player existingPlayer = Player.builder()
                 .id("p1")
                 .username("Player1")
+                .connected(true)
                 .build();
         Room mockRoom = Room.builder()
                 .roomId("TEST")

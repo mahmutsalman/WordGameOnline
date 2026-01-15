@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoomStore } from '../store/roomStore';
 import { useRoomWebSocket } from '../hooks/useRoomWebSocket';
@@ -10,7 +11,7 @@ import type { Team, Role } from '../types';
 export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
-  const { room, currentPlayer } = useRoomStore();
+  const { room, currentPlayer, reset } = useRoomStore();
 
   // Get username from session storage (set during room creation/join)
   const username = sessionStorage.getItem('username') || 'Guest';
@@ -18,6 +19,19 @@ export default function RoomPage() {
   // Connect to WebSocket
   const { connectionStatus, error, changeTeam, isConnected } =
     useRoomWebSocket(roomId!, username);
+
+  // Clear room-scoped client state when leaving the page
+  useEffect(() => {
+    return () => {
+      reset();
+      sessionStorage.removeItem('playerId');
+      sessionStorage.removeItem('roomId');
+      sessionStorage.removeItem('isCreator');
+    };
+  }, [reset]);
+
+  const totalPlayers = room?.players.length ?? 0;
+  const onlinePlayers = room?.players.filter((p) => p.connected).length ?? 0;
 
   // Handle team/role change
   const handleTeamChange = (team: Team | null, role: Role) => {
@@ -187,7 +201,10 @@ export default function RoomPage() {
           <div className="md:col-span-2">
             <div className="bg-white rounded-lg shadow-lg p-6">
               <h2 className="text-xl font-semibold text-gray-800 mb-4">
-                Players ({room?.players.length || 0})
+                Players ({totalPlayers})
+                <span className="text-sm font-normal text-gray-500 ml-2">
+                  {onlinePlayers} online
+                </span>
               </h2>
 
               {room && (
@@ -203,17 +220,26 @@ export default function RoomPage() {
                         .map((player) => (
                           <div
                             key={player.id}
-                            className="p-3 bg-blue-50 rounded-lg border border-blue-200"
+                            className={`p-3 bg-blue-50 rounded-lg border border-blue-200 ${!player.connected ? 'opacity-60' : ''}`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-medium text-gray-800">
+                              <span
+                                className={`font-medium ${player.connected ? 'text-gray-800' : 'text-gray-500 line-through'}`}
+                              >
                                 {player.username}
                               </span>
-                              <span
-                                className={`px-2 py-1 text-xs rounded-full ${getRoleBadge(player.role)}`}
-                              >
-                                {player.role}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {!player.connected && (
+                                  <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
+                                    Disconnected
+                                  </span>
+                                )}
+                                <span
+                                  className={`px-2 py-1 text-xs rounded-full ${getRoleBadge(player.role)}`}
+                                >
+                                  {player.role}
+                                </span>
+                              </div>
                             </div>
                             {player.admin && (
                               <span className="text-xs text-blue-600 mt-1 block">
@@ -242,17 +268,26 @@ export default function RoomPage() {
                         .map((player) => (
                           <div
                             key={player.id}
-                            className="p-3 bg-red-50 rounded-lg border border-red-200"
+                            className={`p-3 bg-red-50 rounded-lg border border-red-200 ${!player.connected ? 'opacity-60' : ''}`}
                           >
                             <div className="flex items-center justify-between">
-                              <span className="font-medium text-gray-800">
+                              <span
+                                className={`font-medium ${player.connected ? 'text-gray-800' : 'text-gray-500 line-through'}`}
+                              >
                                 {player.username}
                               </span>
-                              <span
-                                className={`px-2 py-1 text-xs rounded-full ${getRoleBadge(player.role)}`}
-                              >
-                                {player.role}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                {!player.connected && (
+                                  <span className="px-2 py-1 text-xs rounded-full bg-gray-200 text-gray-700">
+                                    Disconnected
+                                  </span>
+                                )}
+                                <span
+                                  className={`px-2 py-1 text-xs rounded-full ${getRoleBadge(player.role)}`}
+                                >
+                                  {player.role}
+                                </span>
+                              </div>
                             </div>
                             {player.admin && (
                               <span className="text-xs text-red-600 mt-1 block">
@@ -282,14 +317,21 @@ export default function RoomPage() {
                           .map((player) => (
                             <div
                               key={player.id}
-                              className="p-3 bg-gray-50 rounded-lg border border-gray-200 inline-block mr-2"
+                              className={`p-3 bg-gray-50 rounded-lg border border-gray-200 inline-block mr-2 ${!player.connected ? 'opacity-60' : ''}`}
                             >
-                              <span className="font-medium text-gray-800">
+                              <span
+                                className={`font-medium ${player.connected ? 'text-gray-800' : 'text-gray-500 line-through'}`}
+                              >
                                 {player.username}
                               </span>
                               {player.admin && (
                                 <span className="text-xs text-gray-600 ml-2">
                                   ⭐ Admin
+                                </span>
+                              )}
+                              {!player.connected && (
+                                <span className="text-xs text-gray-500 ml-2">
+                                  (disconnected)
                                 </span>
                               )}
                             </div>

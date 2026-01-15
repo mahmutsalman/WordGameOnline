@@ -253,8 +253,8 @@ class GameWebSocketControllerTest {
     }
 
     @Test
-    void shouldReceiveErrorEventForDuplicateUsername() throws Exception {
-        // Arrange: Create room and join with first player
+    void shouldTreatDuplicateUsernameJoinAsReconnect() throws Exception {
+        // Arrange: Create room and join with first player (via REST, marked as connected=true)
         Room room = roomService.createRoom("Admin");
         String roomId = room.getRoomId();
         roomService.joinRoom(roomId, "ExistingPlayer");
@@ -280,14 +280,16 @@ class GameWebSocketControllerTest {
         // Small delay to ensure subscription is registered
         Thread.sleep(1000);
 
-        // Act: Try to join with duplicate username
+        // Act: Try to join with same username as connected player
+        // This is treated as reconnect (e.g., player establishing WebSocket after REST join,
+        // or StrictMode race condition)
         session.send("/app/room/" + roomId + "/join", Map.of("username", "ExistingPlayer"));
 
-        // Assert: Verify ERROR event received
-        String errorMsg = privateMessages.poll(10, TimeUnit.SECONDS);
-        assertThat(errorMsg).isNotNull();
-        assertThat(errorMsg).contains("\"type\":\"ERROR\"");
-        assertThat(errorMsg).contains("\"message\"");
+        // Assert: Should receive ROOM_STATE (treated as reconnect, not error)
+        String response = privateMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(response).isNotNull();
+        assertThat(response).contains("\"type\":\"ROOM_STATE\"");
+        assertThat(response).contains("ExistingPlayer");
     }
 
     // ========== PLAYER_UPDATED EVENT TESTS ==========

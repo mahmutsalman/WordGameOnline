@@ -54,8 +54,20 @@ public class GameWebSocketController {
                 roomId, request.getUsername(), sessionId);
 
         try {
+            if (sessionManager.consumeDisconnectedSession(sessionId)) {
+                log.info("Join ignored for disconnected session: roomId={}, username={}, sessionId={}",
+                        roomId, request.getUsername(), sessionId);
+                return;
+            }
+
+            var sessionAttributes = headerAccessor.getSessionAttributes();
+            if (sessionAttributes == null) {
+                sendErrorToUser(sessionId, "Session not available");
+                return;
+            }
+
             // Guard against duplicate join messages on the same WebSocket session
-            String existingPlayerId = (String) headerAccessor.getSessionAttributes().get("playerId");
+            String existingPlayerId = (String) sessionAttributes.get("playerId");
             if (existingPlayerId != null) {
                 log.info("Duplicate join ignored: roomId={}, sessionId={}, existingPlayerId={}",
                         roomId, sessionId, existingPlayerId);
@@ -64,27 +76,78 @@ public class GameWebSocketController {
                 return;
             }
 
-            // Join room via service
-            Room room = roomService.joinRoom(roomId, request.getUsername());
+            // Guard against duplicate join messages while the initial join is still in-flight
+            String pendingUsername = (String) sessionAttributes.get("pendingUsername");
+            if (pendingUsername != null
+                    && pendingUsername.equalsIgnoreCase(request.getUsername())) {
+                log.info("Duplicate join ignored (pending): roomId={}, sessionId={}, username={}",
+                        roomId, sessionId, request.getUsername());
+                return;
+            }
 
-            // Find the player that just joined
-            Player player = room.getPlayers().stream()
-                    .filter(p -> p.getUsername().equalsIgnoreCase(request.getUsername()))
-                    .findFirst()
-                    .orElseThrow(() -> new IllegalStateException("Player not found after join"));
+            sessionAttributes.put("pendingUsername", request.getUsername());
 
-            // Track session
-            sessionManager.registerSession(player.getId(), roomId, sessionId);
+            try {
+                // Safety guard: Check if player already exists and is connected (race condition from StrictMode)
+                // This handles the case where frontend incorrectly sends join instead of reconnect
+                if (roomService.roomExists(roomId)) {
+                    Room existingRoom = roomService.getRoom(roomId);
+                    Player connectedPlayer = existingRoom.getPlayers().stream()
+                            .filter(p -> p.getUsername().equalsIgnoreCase(request.getUsername()))
+                            .filter(Player::isConnected)
+                            .findFirst()
+                            .orElse(null);
 
-            // Store playerId and roomId in session attributes for disconnect handling
-            headerAccessor.getSessionAttributes().put("playerId", player.getId());
-            headerAccessor.getSessionAttributes().put("roomId", roomId);
+                    if (connectedPlayer != null) {
+                        log.info("Player {} already connected in room {}, treating join as reconnect (race condition guard)",
+                                request.getUsername(), roomId);
 
-            // Broadcast to all players in room (Observer pattern - broadcast)
-            broadcastPlayerJoined(roomId, player);
+                        // Register session
+                        sessionManager.registerSession(connectedPlayer.getId(), roomId, sessionId);
 
-            // Send current room state to the new player privately
-            sendRoomStateToUser(sessionId, room);
+                        // Store in session attributes
+                        sessionAttributes.put("playerId", connectedPlayer.getId());
+                        sessionAttributes.put("roomId", roomId);
+
+                        // Send room state to user
+                        sendRoomStateToUser(sessionId, existingRoom);
+                        return;
+                    }
+                }
+
+                // Join room via service
+                Room room = roomService.joinRoom(roomId, request.getUsername());
+
+                // Find the player that just joined
+                Player player = room.getPlayers().stream()
+                        .filter(p -> p.getUsername().equalsIgnoreCase(request.getUsername()))
+                        .findFirst()
+                        .orElseThrow(() -> new IllegalStateException("Player not found after join"));
+
+                // Handle out-of-order disconnect events (disconnect can arrive before join completes)
+                if (sessionManager.consumeDisconnectedSession(sessionId)) {
+                    log.info("Join completed after disconnect; marking player disconnected: roomId={}, username={}, sessionId={}, playerId={}",
+                            roomId, request.getUsername(), sessionId, player.getId());
+                    player.setConnected(false);
+                    return;
+                }
+
+                // Track session
+                sessionManager.registerSession(player.getId(), roomId, sessionId);
+
+                // Store playerId and roomId in session attributes for disconnect handling
+                sessionAttributes.put("playerId", player.getId());
+                sessionAttributes.put("roomId", roomId);
+
+                // Broadcast to all players in room (Observer pattern - broadcast)
+                broadcastPlayerJoined(roomId, player);
+
+                // Send current room state to the new player privately
+                sendRoomStateToUser(sessionId, room);
+
+            } finally {
+                sessionAttributes.remove("pendingUsername");
+            }
 
         } catch (Exception e) {
             log.error("Join room failed: roomId={}, error={}", roomId, e.getMessage());
@@ -177,14 +240,34 @@ public class GameWebSocketController {
                 roomId, request.getPlayerId(), sessionId);
 
         try {
+            if (sessionManager.consumeDisconnectedSession(sessionId)) {
+                log.info("Reconnect ignored for disconnected session: roomId={}, playerId={}, sessionId={}",
+                        roomId, request.getPlayerId(), sessionId);
+                return;
+            }
+
             // Verify player exists in room + mark connected
             Room room = roomService.reconnectPlayer(roomId, request.getPlayerId());
             Player player = room.getPlayer(request.getPlayerId())
                     .orElseThrow(() -> new PlayerNotFoundException(request.getPlayerId()));
 
+            // Handle out-of-order disconnect events (disconnect can arrive before reconnect completes)
+            if (sessionManager.consumeDisconnectedSession(sessionId)) {
+                log.info("Reconnect completed after disconnect; marking player disconnected: roomId={}, playerId={}, sessionId={}",
+                        roomId, request.getPlayerId(), sessionId);
+                player.setConnected(false);
+                return;
+            }
+
+            var sessionAttributes = headerAccessor.getSessionAttributes();
+            if (sessionAttributes == null) {
+                sendErrorToUser(sessionId, "Session not available");
+                return;
+            }
+
             // Store playerId and roomId in WebSocket session (critical for team changes!)
-            headerAccessor.getSessionAttributes().put("playerId", player.getId());
-            headerAccessor.getSessionAttributes().put("roomId", roomId);
+            sessionAttributes.put("playerId", player.getId());
+            sessionAttributes.put("roomId", roomId);
 
             // Register session with session manager
             sessionManager.registerSession(player.getId(), roomId, sessionId);

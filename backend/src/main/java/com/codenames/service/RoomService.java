@@ -55,7 +55,9 @@ public class RoomService {
 
     /**
      * Adds a player to an existing room.
-     * Validates that the room exists and the username is not already taken.
+     * Validates that the room exists and the username is not already used by a connected player.
+     * If a disconnected player with the same username exists, this is treated as a rejoin and the player
+     * is marked connected again.
      *
      * @param roomId   the room ID to join
      * @param username the player's username
@@ -69,11 +71,21 @@ public class RoomService {
         Room room = roomRepository.findById(roomId)
                 .orElseThrow(() -> new RoomNotFoundException(roomId));
 
-        // Check if username already exists (case-insensitive)
-        boolean usernameTaken = room.getPlayers().stream()
-                .anyMatch(p -> p.getUsername().equalsIgnoreCase(username));
+        // If username exists:
+        // - connected=true  => reject (username taken)
+        // - connected=false => treat as rejoin and mark connected=true
+        Player existingPlayer = room.getPlayers().stream()
+                .filter(p -> p.getUsername().equalsIgnoreCase(username))
+                .findFirst()
+                .orElse(null);
 
-        if (usernameTaken) {
+        if (existingPlayer != null) {
+            if (!existingPlayer.isConnected()) {
+                existingPlayer.setConnected(true);
+                log.info("Player {} rejoined room {} (ID: {})", username, roomId, existingPlayer.getId());
+                return room;
+            }
+
             log.warn("Username {} already exists in room {}", username, roomId);
             throw new UsernameAlreadyExistsException(username);
         }

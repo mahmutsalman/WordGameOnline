@@ -213,6 +213,9 @@ export function useRoomWebSocket(roomId: string, username: string) {
 
     if (isCreator) {
       console.log('Room creator detected - using reconnect flow');
+      // CRITICAL: Set playerId synchronously BEFORE starting connection
+      // This ensures playerId is available when onConnect fires and calls ensurePresence
+      websocketService.setPlayerId(currentPlayer!.id);
       websocketService
         .connectWithoutJoin(roomId)
         .catch((error) => {

@@ -39,6 +39,8 @@ export class WebSocketService {
   private maxReconnectAttempts = 5;
   private config: WebSocketConfig;
   private intentionalDisconnect = false;
+  // Connection instance ID to invalidate stale callbacks from old connections
+  private connectionInstanceId = 0;
 
   constructor(config?: Partial<WebSocketConfig>) {
     this.config = {
@@ -69,6 +71,10 @@ export class WebSocketService {
       return this.connectPromise ?? Promise.resolve();
     }
 
+    // Capture current instance ID to detect stale callbacks
+    // Only increment when actually creating a new connection
+    const instanceId = ++this.connectionInstanceId;
+
     this.connectPromise = new Promise((resolve, reject) => {
       this.updateStatus('CONNECTING');
 
@@ -82,6 +88,13 @@ export class WebSocketService {
         heartbeatOutgoing: this.config.heartbeatOutgoing,
 
         onConnect: () => {
+          // Guard: ignore if this is a stale connection (from before a disconnect)
+          if (this.connectionInstanceId !== instanceId) {
+            console.log('Ignoring stale connection callback (connect)');
+            this.client?.deactivate();
+            return;
+          }
+
           console.log('WebSocket connected');
           this.reconnectAttempts = 0;
           this.updateStatus('CONNECTED');
@@ -157,6 +170,10 @@ export class WebSocketService {
       return this.connectPromise ?? Promise.resolve();
     }
 
+    // Capture current instance ID to detect stale callbacks
+    // Only increment when actually creating a new connection
+    const instanceId = ++this.connectionInstanceId;
+
     this.connectPromise = new Promise((resolve, reject) => {
       this.updateStatus('CONNECTING');
 
@@ -170,6 +187,13 @@ export class WebSocketService {
         heartbeatOutgoing: this.config.heartbeatOutgoing,
 
         onConnect: () => {
+          // Guard: ignore if this is a stale connection (from before a disconnect)
+          if (this.connectionInstanceId !== instanceId) {
+            console.log('Ignoring stale connection callback (connectWithoutJoin)');
+            this.client?.deactivate();
+            return;
+          }
+
           console.log('WebSocket connected (without join)');
           this.reconnectAttempts = 0;
           this.updateStatus('CONNECTED');
@@ -231,6 +255,10 @@ export class WebSocketService {
    * Disconnect from WebSocket server.
    */
   public disconnect(): void {
+    // Increment instance ID FIRST to invalidate any pending callbacks
+    // This prevents stale onConnect callbacks from executing after disconnect
+    this.connectionInstanceId++;
+
     if (this.client?.active) {
       this.intentionalDisconnect = true;
       this.reconnectAttempts = 0;

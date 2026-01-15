@@ -29,31 +29,43 @@ public class WebSocketEventListener {
     @EventListener
     public void handleDisconnect(SessionDisconnectEvent event) {
         StompHeaderAccessor headers = StompHeaderAccessor.wrap(event.getMessage());
+
+        String sessionId = headers.getSessionId();
+        sessionManager.markSessionDisconnected(sessionId);
+
         Map<String, Object> attrs = headers.getSessionAttributes();
 
-        if (attrs == null) {
+        String playerId = attrs != null ? (String) attrs.get("playerId") : null;
+        String roomId = attrs != null ? (String) attrs.get("roomId") : null;
+
+        // Fallback: resolve playerId/roomId via session manager when session attributes are missing
+        if (playerId == null && sessionId != null) {
+            playerId = sessionManager.getPlayerIdBySessionId(sessionId);
+            if (playerId != null && roomId == null) {
+                roomId = sessionManager.getSession(playerId)
+                        .map(WebSocketSessionManager.SessionInfo::getRoomId)
+                        .orElse(null);
+            }
+        }
+
+        if (playerId == null || roomId == null) {
             return;
         }
 
-        String playerId = (String) attrs.get("playerId");
-        String roomId = (String) attrs.get("roomId");
+        log.info("Player disconnected: playerId={}, roomId={}", playerId, roomId);
 
-        if (playerId != null && roomId != null) {
-            log.info("Player disconnected: playerId={}, roomId={}", playerId, roomId);
+        try {
+            roomService.markPlayerDisconnected(roomId, playerId);
+            sessionManager.removeSession(playerId);
 
-            try {
-                roomService.markPlayerDisconnected(roomId, playerId);
-                sessionManager.removeSession(playerId);
-
-                // Broadcast disconnect
-                messagingTemplate.convertAndSend(
-                        "/topic/room/" + roomId,
-                        PlayerLeftEvent.builder().playerId(playerId).build()
-                );
-            } catch (Exception e) {
-                log.error("Error handling disconnect: playerId={}, roomId={}, error={}",
-                        playerId, roomId, e.getMessage());
-            }
+            // Broadcast disconnect
+            messagingTemplate.convertAndSend(
+                    "/topic/room/" + roomId,
+                    PlayerLeftEvent.builder().playerId(playerId).build()
+            );
+        } catch (Exception e) {
+            log.error("Error handling disconnect: playerId={}, roomId={}, error={}",
+                    playerId, roomId, e.getMessage());
         }
     }
 }
