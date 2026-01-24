@@ -59,4 +59,12 @@ temp/
 coverage/
 *.lcov
 
+# CodeTour
+.tours/
+codetour-debug.txt
+
+# Test outputs
+frontend/playwright-report/
+frontend/test-results/
+
 # Build outputs are handled by backend/ and frontend/ .gitignore files
