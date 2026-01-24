@@ -37,6 +37,39 @@ export interface RoomResponse {
   adminId: string;
 }
 
+// Game state types
+export interface CardResponse {
+  word: string;
+  color: 'BLUE' | 'RED' | 'NEUTRAL' | 'ASSASSIN' | null;
+  revealed: boolean;
+  selectedBy: string | null;
+}
+
+export interface Clue {
+  word: string;
+  number: number;
+  team: 'BLUE' | 'RED';
+}
+
+export interface TurnHistoryResponse {
+  team: 'BLUE' | 'RED';
+  clue: Clue;
+  guessedWords: string[];
+  guessedColors: ('BLUE' | 'RED' | 'NEUTRAL' | 'ASSASSIN')[];
+}
+
+export interface GameStateResponse {
+  board: CardResponse[];
+  currentTeam: 'BLUE' | 'RED';
+  phase: 'LOBBY' | 'CLUE' | 'GUESS' | 'GAME_OVER';
+  currentClue: Clue | null;
+  guessesRemaining: number;
+  blueRemaining: number;
+  redRemaining: number;
+  winner: 'BLUE' | 'RED' | null;
+  history: TurnHistoryResponse[];
+}
+
 // ========== API FUNCTIONS ==========
 
 /**
@@ -122,6 +155,48 @@ export async function joinRoom(
       'Content-Type': 'application/json',
     },
     body: JSON.stringify(request),
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(JSON.stringify(error));
+  }
+
+  return response.json();
+}
+
+/**
+ * Starts the game for a room.
+ * POST /api/rooms/{roomId}/start
+ *
+ * @param roomId - The room ID to start the game for
+ * @returns Promise<GameStateResponse> - The initial game state
+ * @throws Error if game cannot start (not enough players, roles not assigned, etc.)
+ */
+export async function startGame(roomId: string): Promise<GameStateResponse> {
+  const response = await fetch(`${API_BASE}/rooms/${roomId}/start`, {
+    method: 'POST',
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(JSON.stringify(error));
+  }
+
+  return response.json();
+}
+
+/**
+ * Gets the current game state for a room.
+ * GET /api/rooms/{roomId}/game
+ *
+ * @param roomId - The room ID to get game state for
+ * @returns Promise<GameStateResponse> - The current game state
+ * @throws Error if game not found or not started
+ */
+export async function getGameState(roomId: string): Promise<GameStateResponse> {
+  const response = await fetch(`${API_BASE}/rooms/${roomId}/game`, {
+    method: 'GET',
   });
 
   if (!response.ok) {

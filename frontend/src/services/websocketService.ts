@@ -27,6 +27,7 @@ interface WebSocketConfig {
 export class WebSocketService {
   private client: Client | null = null;
   private roomSubscription: StompSubscription | null = null;
+  private gameSubscription: StompSubscription | null = null;
   private privateSubscription: StompSubscription | null = null;
   private messageHandlers: Set<MessageHandler> = new Set();
   private statusHandlers: Set<ConnectionStatusHandler> = new Set();
@@ -266,8 +267,10 @@ export class WebSocketService {
 
       // Unsubscribe from topics
       this.roomSubscription?.unsubscribe();
+      this.gameSubscription?.unsubscribe();
       this.privateSubscription?.unsubscribe();
       this.roomSubscription = null;
+      this.gameSubscription = null;
       this.privateSubscription = null;
 
       // Deactivate client
@@ -299,6 +302,17 @@ export class WebSocketService {
     // Subscribe to room topic for broadcasts
     this.roomSubscription = this.client.subscribe(
       `/topic/room/${roomId}`,
+      (message: IMessage) => {
+        this.handleMessage(message);
+      }
+    );
+
+    // Unsubscribe from previous game subscription
+    this.gameSubscription?.unsubscribe();
+
+    // Subscribe to game topic for game state broadcasts
+    this.gameSubscription = this.client.subscribe(
+      `/topic/room/${roomId}/game`,
       (message: IMessage) => {
         this.handleMessage(message);
       }
@@ -409,6 +423,36 @@ export class WebSocketService {
     });
 
     console.log('Sent team change request:', requestWithPlayerId);
+  }
+
+  /**
+   * Submit a clue (spymaster action).
+   */
+  public submitClue(roomId: string, word: string, number: number): void {
+    if (!this.client?.connected) {
+      console.error('Cannot submit clue: client not connected');
+      return;
+    }
+
+    this.client.publish({
+      destination: `/app/room/${roomId}/clue`,
+      body: JSON.stringify({ word, number }),
+    });
+  }
+
+  /**
+   * Make a guess (operative action).
+   */
+  public makeGuess(roomId: string, cardIndex: number): void {
+    if (!this.client?.connected) {
+      console.error('Cannot make guess: client not connected');
+      return;
+    }
+
+    this.client.publish({
+      destination: `/app/room/${roomId}/guess`,
+      body: JSON.stringify({ cardIndex }),
+    });
   }
 
   /**

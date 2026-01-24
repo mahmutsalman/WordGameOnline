@@ -387,11 +387,15 @@ describe('WebSocketService', () => {
       service = new WebSocketService();
     });
 
-    it('should subscribe to room topic and private queue', async () => {
+    it('should subscribe to room topic, game topic, and private queue', async () => {
       await service.connect('room123', 'user1');
 
       expect(mockClient.subscribe).toHaveBeenCalledWith(
         '/topic/room/room123',
+        expect.any(Function)
+      );
+      expect(mockClient.subscribe).toHaveBeenCalledWith(
+        '/topic/room/room123/game',
         expect.any(Function)
       );
       expect(mockClient.subscribe).toHaveBeenCalledWith(
@@ -403,8 +407,8 @@ describe('WebSocketService', () => {
     it('should prevent duplicate subscriptions on reconnect', async () => {
       await service.connect('room123', 'user1');
 
-      // Verify initial subscriptions
-      expect(mockClient.subscribe).toHaveBeenCalledTimes(2);
+      // Verify initial subscriptions (room, game, and private queue)
+      expect(mockClient.subscribe).toHaveBeenCalledTimes(3);
 
       // Disconnect and reconnect
       service.disconnect();

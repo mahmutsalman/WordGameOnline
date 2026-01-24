@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useRoomStore } from '../store/roomStore';
+import { useGameStore } from '../store/gameStore';
 import { useRoomWebSocket } from '../hooks/useRoomWebSocket';
-import type { Team, Role } from '../types';
+import { startGame } from '../services/api';
+import type { Team, Role, GameState } from '../types';
 
 /**
  * RoomPage - Real-time multiplayer room lobby with WebSocket integration.
@@ -12,6 +14,9 @@ export default function RoomPage() {
   const { roomId } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { room, currentPlayer, reset } = useRoomStore();
+  const { setGameState } = useGameStore();
+  const [isStarting, setIsStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
   const canStart = room?.canStart ?? false;
   const isAdmin = currentPlayer?.admin ?? false;
 
@@ -22,15 +27,13 @@ export default function RoomPage() {
   const { connectionStatus, error, changeTeam, isConnected } =
     useRoomWebSocket(roomId!, username);
 
-  // Clear room-scoped client state when leaving the page
-  useEffect(() => {
-    return () => {
-      reset();
-      sessionStorage.removeItem('playerId');
-      sessionStorage.removeItem('roomId');
-      sessionStorage.removeItem('isCreator');
-    };
-  }, [reset]);
+  const handleBackToHome = () => {
+    reset();
+    sessionStorage.removeItem('playerId');
+    sessionStorage.removeItem('roomId');
+    sessionStorage.removeItem('isCreator');
+    navigate('/');
+  };
 
   const totalPlayers = room?.players.length ?? 0;
   const onlinePlayers = room?.players.filter((p) => p.connected).length ?? 0;
@@ -41,12 +44,46 @@ export default function RoomPage() {
   };
 
   // Handle game start
-  const handleStartGame = () => {
-    if (!canStart) {
+  const handleStartGame = async () => {
+    if (!canStart || !roomId || isStarting) {
       return;
     }
-    // TODO: Implement game start logic in Step-04
-    console.log('Starting game...');
+
+    setIsStarting(true);
+    setStartError(null);
+
+    try {
+      const response = await startGame(roomId);
+
+      // Map API response to GameState (history -> turnHistory)
+      const gameState: GameState = {
+        board: response.board.map(card => ({
+          word: card.word,
+          color:
+            currentPlayer?.role === 'SPYMASTER' || card.revealed ? card.color : null,
+          revealed: card.revealed,
+          selectedBy: card.selectedBy ?? undefined,
+        })),
+        currentTeam: response.currentTeam,
+        phase: response.phase,
+        currentClue: response.currentClue,
+        guessesRemaining: response.guessesRemaining,
+        blueRemaining: response.blueRemaining,
+        redRemaining: response.redRemaining,
+        winner: response.winner,
+        turnHistory: response.history,
+      };
+
+      setGameState(gameState);
+
+      // Navigate to game page
+      navigate(`/room/${roomId}/game`);
+    } catch (err) {
+      console.error('Failed to start game:', err);
+      setStartError(err instanceof Error ? err.message : 'Failed to start game');
+    } finally {
+      setIsStarting(false);
+    }
   };
 
   // Connection status indicator
@@ -359,16 +396,21 @@ export default function RoomPage() {
         {/* Start Game Section - Admin Only */}
         {isAdmin && (
           <div className="bg-white rounded-lg shadow-lg p-6 mt-6">
+            {startError && (
+              <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                <p className="text-sm text-red-700">{startError}</p>
+              </div>
+            )}
             <button
               onClick={handleStartGame}
-              disabled={!canStart}
+              disabled={!canStart || isStarting}
               className={`w-full px-6 py-3 rounded-lg text-lg font-semibold transition duration-200 ${
-                canStart
+                canStart && !isStarting
                   ? 'bg-green-500 hover:bg-green-600 text-white'
                   : 'bg-gray-300 text-gray-500 cursor-not-allowed'
               }`}
             >
-              {canStart ? 'Start Game' : 'Waiting for Teams...'}
+              {isStarting ? 'Starting Game...' : canStart ? 'Start Game' : 'Waiting for Teams...'}
             </button>
             {!canStart && (
               <p className="text-sm text-gray-600 text-center mt-2">
@@ -381,7 +423,7 @@ export default function RoomPage() {
         {/* Action Button */}
         <div className="mt-6">
           <button
-            onClick={() => navigate('/')}
+            onClick={handleBackToHome}
             className="bg-gray-600 hover:bg-gray-700 text-white font-semibold py-3 px-6 rounded-lg transition duration-200"
           >
             ← Back to Home

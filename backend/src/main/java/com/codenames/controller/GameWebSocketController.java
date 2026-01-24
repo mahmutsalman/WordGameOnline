@@ -5,11 +5,15 @@ import com.codenames.dto.events.PlayerJoinedEvent;
 import com.codenames.dto.events.PlayerLeftEvent;
 import com.codenames.dto.events.PlayerUpdatedEvent;
 import com.codenames.dto.request.ChangeTeamRequest;
+import com.codenames.dto.request.ClueRequest;
+import com.codenames.dto.request.GuessRequest;
 import com.codenames.dto.request.JoinRoomWsRequest;
 import com.codenames.dto.request.ReconnectPlayerRequest;
 import com.codenames.exception.PlayerNotFoundException;
 import com.codenames.model.Player;
 import com.codenames.model.Room;
+import com.codenames.model.Role;
+import com.codenames.service.GameService;
 import com.codenames.service.RoomService;
 import com.codenames.service.WebSocketSessionManager;
 import jakarta.validation.Valid;
@@ -22,6 +26,8 @@ import org.springframework.messaging.simp.SimpMessageHeaderAccessor;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Controller;
 
+import java.util.Map;
+
 /**
  * WebSocket controller for real-time game communication.
  * Handles player joining, team changes, and broadcasts game events.
@@ -32,6 +38,7 @@ import org.springframework.stereotype.Controller;
 public class GameWebSocketController {
 
     private final RoomService roomService;
+    private final GameService gameService;
     private final SimpMessagingTemplate messagingTemplate;
     private final WebSocketSessionManager sessionManager;
 
@@ -73,6 +80,8 @@ public class GameWebSocketController {
                         roomId, sessionId, existingPlayerId);
                 Room room = roomService.getRoom(roomId);
                 sendRoomStateToUser(sessionId, room);
+                Role role = room.getPlayer(existingPlayerId).map(Player::getRole).orElse(Role.SPECTATOR);
+                sendGameStateIfPresent(sessionId, roomId, role);
                 return;
             }
 
@@ -111,6 +120,7 @@ public class GameWebSocketController {
 
                         // Send room state to user
                         sendRoomStateToUser(sessionId, existingRoom);
+                        sendGameStateIfPresent(sessionId, roomId, connectedPlayer.getRole());
                         return;
                     }
                 }
@@ -147,6 +157,7 @@ public class GameWebSocketController {
 
                 // Also send room state to the new player privately (for immediate UI update)
                 sendRoomStateToUser(sessionId, room);
+                sendGameStateIfPresent(sessionId, roomId, player.getRole());
 
             } finally {
                 sessionAttributes.remove("pendingUsername");
@@ -280,6 +291,7 @@ public class GameWebSocketController {
 
             // Also send room state to reconnected player privately (for immediate UI update)
             sendRoomStateToUser(sessionId, room);
+            sendGameStateIfPresent(sessionId, roomId, player.getRole());
 
             log.info("Player reconnected successfully: {} (ID: {}) to room {}",
                     player.getUsername(), player.getId(), roomId);
@@ -290,6 +302,66 @@ public class GameWebSocketController {
         } catch (Exception e) {
             log.error("Reconnect failed: {}", e.getMessage(), e);
             sendErrorToUser(sessionId, "Failed to reconnect: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Handle spymaster submitting a clue via WebSocket.
+     */
+    @MessageMapping("/room/{roomId}/clue")
+    public void submitClue(
+            @DestinationVariable String roomId,
+            @Valid @Payload ClueRequest request,
+            SimpMessageHeaderAccessor headerAccessor) {
+
+        String sessionId = headerAccessor.getSessionId();
+        var sessionAttributes = headerAccessor.getSessionAttributes();
+        if (sessionAttributes == null) {
+            sendErrorToUser(sessionId, "Session not available");
+            return;
+        }
+        String playerId = (String) sessionAttributes.get("playerId");
+
+        if (playerId == null) {
+            sendErrorToUser(sessionId, "Player not found - please reconnect to the room");
+            return;
+        }
+
+        try {
+            gameService.submitClue(roomId, playerId, request.getWord(), request.getNumber());
+        } catch (Exception e) {
+            log.error("Submit clue failed: roomId={}, playerId={}, error={}", roomId, playerId, e.getMessage());
+            sendErrorToUser(sessionId, e.getMessage());
+        }
+    }
+
+    /**
+     * Handle operative making a guess via WebSocket.
+     */
+    @MessageMapping("/room/{roomId}/guess")
+    public void makeGuess(
+            @DestinationVariable String roomId,
+            @Valid @Payload GuessRequest request,
+            SimpMessageHeaderAccessor headerAccessor) {
+
+        String sessionId = headerAccessor.getSessionId();
+        var sessionAttributes = headerAccessor.getSessionAttributes();
+        if (sessionAttributes == null) {
+            sendErrorToUser(sessionId, "Session not available");
+            return;
+        }
+        String playerId = (String) sessionAttributes.get("playerId");
+
+        if (playerId == null) {
+            sendErrorToUser(sessionId, "Player not found - please reconnect to the room");
+            return;
+        }
+
+        try {
+            gameService.makeGuess(roomId, playerId, request.getCardIndex());
+        } catch (Exception e) {
+            log.error("Make guess failed: roomId={}, playerId={}, error={}", roomId, playerId, e.getMessage());
+            sendErrorToUser(sessionId, e.getMessage());
         }
     }
 
@@ -381,6 +453,18 @@ public class GameWebSocketController {
      */
     private void sendRoomStateToUser(String sessionId, Room room) {
         sendToUser(sessionId, roomService.toRoomState(room));
+    }
+
+    private void sendGameStateToUser(String sessionId, Map<String, Object> gameStateEvent) {
+        sendToUser(sessionId, gameStateEvent);
+    }
+
+    private void sendGameStateIfPresent(String sessionId, String roomId, Role role) {
+        var state = gameService.getGameState(roomId);
+        if (state == null) {
+            return;
+        }
+        sendGameStateToUser(sessionId, gameService.createGameStateEvent(state, role == Role.SPYMASTER));
     }
 
     /**

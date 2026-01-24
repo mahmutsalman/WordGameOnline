@@ -1,6 +1,8 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { websocketService } from '../services/websocketService';
 import { useRoomStore } from '../store/roomStore';
+import { useGameStore } from '../store/gameStore';
 import type {
   WSEvent,
   ErrorEvent,
@@ -8,6 +10,8 @@ import type {
   ChangeTeamRequest,
   Team,
   Role,
+  GameState,
+  GameStateEvent,
 } from '../types';
 
 /**
@@ -24,6 +28,7 @@ export function useRoomWebSocket(roomId: string, username: string) {
   const [error, setError] = useState<string | null>(null);
   const { currentPlayer } = useRoomStore();
   const hasRequestedConnection = useRef(false);
+  const navigate = useNavigate();
 
   /**
    * Handle ERROR event.
@@ -135,9 +140,42 @@ export function useRoomWebSocket(roomId: string, username: string) {
             if (myPlayer) {
               setCurrentPlayer(myPlayer);
               websocketService.setPlayerId(myPlayer.id);
+              sessionStorage.setItem('playerId', myPlayer.id);
             }
           }
           break;
+        case 'GAME_STATE': {
+          console.log('Game state received via WebSocket:', event);
+          const { setGameState } = useGameStore.getState();
+
+          // Type assertion for GameStateEvent
+          const gameEvent = event as GameStateEvent;
+
+          // Map WebSocket event to GameState
+          const gameState: GameState = {
+            board: gameEvent.board.map(card => ({
+              word: card.word,
+              color: card.color,
+              revealed: card.revealed,
+              selectedBy: card.selectedBy ?? undefined,
+            })),
+            currentTeam: gameEvent.currentTeam,
+            phase: gameEvent.phase,
+            currentClue: gameEvent.currentClue,
+            guessesRemaining: gameEvent.guessesRemaining,
+            blueRemaining: gameEvent.blueRemaining,
+            redRemaining: gameEvent.redRemaining,
+            winner: gameEvent.winner,
+            turnHistory: gameEvent.history,
+          };
+
+          // Update game store
+          setGameState(gameState);
+
+          // Navigate to game page
+          navigate(`/room/${roomId}/game`);
+          break;
+        }
         case 'ERROR':
           handleError(event);
           break;
@@ -145,7 +183,7 @@ export function useRoomWebSocket(roomId: string, username: string) {
           console.warn('Unknown WebSocket event type:', event);
       }
     },
-    [roomId, username, handleError]
+    [roomId, username, handleError, navigate]
   );
 
   /**
@@ -201,8 +239,9 @@ export function useRoomWebSocket(roomId: string, username: string) {
     }
 
     const isCreator = sessionStorage.getItem('isCreator') === 'true';
+    const storedPlayerId = sessionStorage.getItem('playerId');
 
-    if (isCreator && !currentPlayer?.id) {
+    if (isCreator && !currentPlayer?.id && !storedPlayerId) {
       return;
     }
 
@@ -215,7 +254,7 @@ export function useRoomWebSocket(roomId: string, username: string) {
       console.log('Room creator detected - using reconnect flow');
       // CRITICAL: Set playerId synchronously BEFORE starting connection
       // This ensures playerId is available when onConnect fires and calls ensurePresence
-      websocketService.setPlayerId(currentPlayer!.id);
+      websocketService.setPlayerId(currentPlayer?.id ?? storedPlayerId!);
       websocketService
         .connectWithoutJoin(roomId)
         .catch((error) => {

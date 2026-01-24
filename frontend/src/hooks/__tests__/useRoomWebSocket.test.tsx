@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
+import { BrowserRouter } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import type {
   WSEvent,
   PlayerJoinedEvent,
@@ -10,6 +12,11 @@ import type {
   Player,
   GameSettings,
 } from '../../types';
+
+// Router wrapper for hooks that use react-router
+const wrapper = ({ children }: { children: ReactNode }) => (
+  <BrowserRouter>{children}</BrowserRouter>
+);
 
 // ============================================================================
 // MOCKS - Must be defined before imports that use them
@@ -74,6 +81,15 @@ vi.mock('../../store/roomStore', () => ({
       getState: () => mockRoomStore,
     }
   ),
+}));
+
+// Mock gameStore
+vi.mock('../../store/gameStore', () => ({
+  useGameStore: {
+    getState: () => ({
+      setGameState: vi.fn(),
+    }),
+  },
 }));
 
 // Import after mocks are defined
@@ -172,7 +188,8 @@ describe('useRoomWebSocket', () => {
       mockRoomStore.currentPlayer = null; // No playerId - connection won't start
 
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       // Should remain DISCONNECTED since connection didn't start
@@ -182,7 +199,8 @@ describe('useRoomWebSocket', () => {
     it('should initialize with null error', () => {
       setupJoinerScenario();
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       expect(result.current.error).toBeNull();
@@ -191,7 +209,8 @@ describe('useRoomWebSocket', () => {
     it('should report isConnected as false initially', () => {
       setupJoinerScenario();
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       expect(result.current.isConnected).toBe(false);
@@ -203,7 +222,7 @@ describe('useRoomWebSocket', () => {
       sessionStorage.setItem('isCreator', 'true');
       mockRoomStore.currentPlayer = null; // No player ID yet
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       // Should not connect without playerId
       expect(websocketService.connectWithoutJoin).not.toHaveBeenCalled();
@@ -213,7 +232,7 @@ describe('useRoomWebSocket', () => {
     it('should use connectWithoutJoin() for creators with playerId', async () => {
       setupCreatorScenario('creator-id');
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       await waitFor(() => {
         expect(websocketService.connectWithoutJoin).toHaveBeenCalledWith(
@@ -230,7 +249,7 @@ describe('useRoomWebSocket', () => {
       sessionStorage.setItem('isCreator', 'true');
       mockRoomStore.currentPlayer = createMockPlayer({ id: 'creator-id' });
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       await waitFor(() => {
         expect(websocketService.connectWithoutJoin).toHaveBeenCalled();
@@ -241,7 +260,8 @@ describe('useRoomWebSocket', () => {
       setupCreatorScenario();
 
       const { rerender } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       await waitFor(() => {
@@ -259,7 +279,7 @@ describe('useRoomWebSocket', () => {
     it('should call setPlayerId with currentPlayer.id', async () => {
       setupCreatorScenario('my-player-id');
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       await waitFor(() => {
         expect(websocketService.setPlayerId).toHaveBeenCalledWith('my-player-id');
@@ -271,7 +291,7 @@ describe('useRoomWebSocket', () => {
     it('should connect immediately for joiners', async () => {
       setupJoinerScenario();
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       await waitFor(() => {
         expect(websocketService.connect).toHaveBeenCalledWith(
@@ -285,7 +305,7 @@ describe('useRoomWebSocket', () => {
       sessionStorage.setItem('isCreator', 'false');
       mockRoomStore.currentPlayer = null; // No player ID yet
 
-      renderHook(() => useRoomWebSocket('room123', 'joiner-user'));
+      renderHook(() => useRoomWebSocket('room123', 'joiner-user'), { wrapper });
 
       await waitFor(() => {
         expect(websocketService.connect).toHaveBeenCalledWith(
@@ -298,7 +318,7 @@ describe('useRoomWebSocket', () => {
     it('should use auto-join via WebSocket connect', async () => {
       setupJoinerScenario();
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       await waitFor(() => {
         // Joiners use connect() which auto-joins
@@ -325,7 +345,7 @@ describe('useRoomWebSocket', () => {
     });
 
     it('should add new player to room.players', async () => {
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerJoinedEvent = {
         type: 'PLAYER_JOINED',
@@ -353,7 +373,7 @@ describe('useRoomWebSocket', () => {
         createMockPlayer({ id: 'reconnecting-player', connected: false }),
       ];
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerJoinedEvent = {
         type: 'PLAYER_JOINED',
@@ -376,7 +396,7 @@ describe('useRoomWebSocket', () => {
     it('should handle gracefully when room is null', async () => {
       mockRoomStore.room = null;
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerJoinedEvent = {
         type: 'PLAYER_JOINED',
@@ -411,7 +431,7 @@ describe('useRoomWebSocket', () => {
     });
 
     it('should mark player as disconnected (connected: false)', async () => {
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerLeftEvent = {
         type: 'PLAYER_LEFT',
@@ -431,7 +451,7 @@ describe('useRoomWebSocket', () => {
     });
 
     it('should handle gracefully when player not found', async () => {
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerLeftEvent = {
         type: 'PLAYER_LEFT',
@@ -461,7 +481,7 @@ describe('useRoomWebSocket', () => {
     });
 
     it('should update player team/role in room.players', async () => {
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerUpdatedEvent = {
         type: 'PLAYER_UPDATED',
@@ -490,7 +510,7 @@ describe('useRoomWebSocket', () => {
         role: 'SPECTATOR',
       });
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerUpdatedEvent = {
         type: 'PLAYER_UPDATED',
@@ -513,7 +533,7 @@ describe('useRoomWebSocket', () => {
     });
 
     it('should handle gracefully when player not found', async () => {
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: PlayerUpdatedEvent = {
         type: 'PLAYER_UPDATED',
@@ -536,7 +556,7 @@ describe('useRoomWebSocket', () => {
     });
 
     it('should replace entire room state', async () => {
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: RoomStateEvent = {
         type: 'ROOM_STATE',
@@ -568,7 +588,7 @@ describe('useRoomWebSocket', () => {
     it('should set currentPlayer if not already set', async () => {
       mockRoomStore.currentPlayer = null;
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: RoomStateEvent = {
         type: 'ROOM_STATE',
@@ -596,7 +616,7 @@ describe('useRoomWebSocket', () => {
     it('should call setPlayerId with player ID from ROOM_STATE', async () => {
       mockRoomStore.currentPlayer = null;
 
-      renderHook(() => useRoomWebSocket('room123', 'testuser'));
+      renderHook(() => useRoomWebSocket('room123', 'testuser'), { wrapper });
 
       const event: RoomStateEvent = {
         type: 'ROOM_STATE',
@@ -621,7 +641,8 @@ describe('useRoomWebSocket', () => {
 
     it('should display error message', async () => {
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       const event: ErrorEvent = {
@@ -640,7 +661,8 @@ describe('useRoomWebSocket', () => {
       vi.useFakeTimers();
 
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       const event: ErrorEvent = {
@@ -676,7 +698,8 @@ describe('useRoomWebSocket', () => {
       mockRoomStore.currentPlayer = createMockPlayer({ id: 'my-player-id' });
 
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       act(() => {
@@ -694,7 +717,8 @@ describe('useRoomWebSocket', () => {
       mockRoomStore.currentPlayer = null;
 
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       act(() => {
@@ -713,7 +737,8 @@ describe('useRoomWebSocket', () => {
 
     it('should disconnect on unmount', async () => {
       const { unmount } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       unmount();
@@ -729,7 +754,8 @@ describe('useRoomWebSocket', () => {
       vi.mocked(websocketService.onStatusChange).mockReturnValue(unsubscribeStatus);
 
       const { unmount } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       unmount();
@@ -741,7 +767,7 @@ describe('useRoomWebSocket', () => {
     it('should disconnect on roomId change', async () => {
       const { rerender, unmount } = renderHook(
         ({ roomId }) => useRoomWebSocket(roomId, 'testuser'),
-        { initialProps: { roomId: 'room123' } }
+        { initialProps: { roomId: 'room123' }, wrapper }
       );
 
       // Clear disconnect calls from initial render
@@ -765,7 +791,8 @@ describe('useRoomWebSocket', () => {
       );
 
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       // Wait for error
@@ -785,7 +812,8 @@ describe('useRoomWebSocket', () => {
 
     it('should update connectionStatus on status change', async () => {
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       act(() => {
@@ -798,7 +826,8 @@ describe('useRoomWebSocket', () => {
 
     it('should reflect RECONNECTING status', async () => {
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'testuser')
+        useRoomWebSocket('room123', 'testuser'),
+        { wrapper }
       );
 
       act(() => {
@@ -823,7 +852,7 @@ describe('useRoomWebSocket', () => {
             : null;
           return useRoomWebSocket('room123', 'testuser');
         },
-        { initialProps: { playerId: null as string | null } }
+        { initialProps: { playerId: null as string | null }, wrapper }
       );
 
       // Should not connect yet
@@ -850,7 +879,8 @@ describe('useRoomWebSocket', () => {
       setupJoinerScenario();
 
       const { result } = renderHook(() =>
-        useRoomWebSocket('room123', 'joiner-user')
+        useRoomWebSocket('room123', 'joiner-user'),
+        { wrapper }
       );
 
       // Should connect immediately

@@ -18,9 +18,9 @@ export type GamePhase = 'LOBBY' | 'CLUE' | 'GUESS' | 'GAME_OVER';
 // Card interface
 export interface Card {
   word: string;
-  color: CardColor;        // Only visible to spymasters until revealed
+  color: CardColor | null;  // null for hidden cards (operative view)
   revealed: boolean;
-  selectedBy?: string;     // Player ID of selector
+  selectedBy?: string;      // Player ID of selector
 }
 
 // Clue interface
@@ -47,7 +47,8 @@ export interface GameState {
 export interface TurnHistory {
   team: Team;
   clue: Clue;
-  guesses: string[];
+  guessedWords: string[];     // Words guessed during this turn
+  guessedColors: CardColor[]; // Colors revealed for each guess
 }
 
 // Player interface (matches backend Player entity)
@@ -122,12 +123,26 @@ export interface ErrorEvent extends BaseWSEvent {
   message: string;
 }
 
+export interface GameStateEvent extends BaseWSEvent {
+  type: 'GAME_STATE';
+  board: Card[];
+  currentTeam: Team;
+  phase: GamePhase;
+  currentClue: Clue | null;
+  guessesRemaining: number;
+  blueRemaining: number;
+  redRemaining: number;
+  winner: Team | null;
+  history: TurnHistory[];
+}
+
 // Union type for all WebSocket events
 export type WSEvent =
   | PlayerJoinedEvent
   | PlayerLeftEvent
   | PlayerUpdatedEvent
   | RoomStateEvent
+  | GameStateEvent
   | ErrorEvent;
 
 // WebSocket Request Types (matching backend request DTOs)
