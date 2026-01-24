@@ -2,6 +2,7 @@ package com.codenames.service;
 
 import com.codenames.exception.GameStartException;
 import com.codenames.exception.RoomNotFoundException;
+import com.codenames.factory.GameStateFactory;
 import com.codenames.model.Card;
 import com.codenames.model.CardColor;
 import com.codenames.model.GamePhase;
@@ -28,7 +29,6 @@ import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -45,7 +45,7 @@ class GameServiceTest {
     private RoomRepository roomRepository;
 
     @Mock
-    private BoardGenerationService boardGenerationService;
+    private GameStateFactory gameStateFactory;
 
     @InjectMocks
     private GameService gameService;
@@ -107,8 +107,7 @@ class GameServiceTest {
         void shouldStartGameSuccessfully() {
             String roomId = "START-SUCC1";
             when(roomRepository.findById(roomId)).thenReturn(Optional.of(testRoom));
-            when(boardGenerationService.initializeGame(eq("english"), any(Team.class)))
-                    .thenReturn(mockGameState);
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
 
             GameState result = gameService.startGame(roomId);
 
@@ -191,58 +190,32 @@ class GameServiceTest {
         void shouldUseEnglishWordPackByDefault() {
             String roomId = "ENGLS-PACK1";
             when(roomRepository.findById(roomId)).thenReturn(Optional.of(testRoom));
-            when(boardGenerationService.initializeGame(eq("english"), any(Team.class)))
-                    .thenReturn(mockGameState);
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
 
             gameService.startGame(roomId);
 
-            verify(boardGenerationService).initializeGame(eq("english"), any(Team.class));
+            verify(gameStateFactory).create(eq("english"));
         }
 
         @Test
-        @DisplayName("should randomly select starting team")
-        void shouldRandomlySelectStartingTeam() {
-            // Track which team was selected for each game
-            List<Team> selectedTeams = new ArrayList<>();
+        @DisplayName("should delegate random starting team selection to factory")
+        void shouldDelegateRandomStartingTeamSelectionToFactory() {
+            String roomId = "RANDOM-TEAM";
+            when(roomRepository.findById(roomId)).thenReturn(Optional.of(testRoom));
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
 
-            when(boardGenerationService.initializeGame(eq("english"), any(Team.class)))
-                    .thenAnswer(invocation -> {
-                        Team selectedTeam = invocation.getArgument(1);
-                        selectedTeams.add(selectedTeam);
-                        return mockGameState;
-                    });
+            gameService.startGame(roomId);
 
-            // Run multiple times with unique room IDs to verify randomness
-            for (int i = 0; i < 100; i++) {
-                String uniqueRoomId = "ROOM" + i + "-TEST1";
-                Room uniqueRoom = Room.builder()
-                        .roomId(uniqueRoomId)
-                        .adminId("admin-id")
-                        .createdAt(LocalDateTime.now())
-                        .players(new ArrayList<>(testRoom.getPlayers()))
-                        .build();
-
-                when(roomRepository.findById(uniqueRoomId)).thenReturn(Optional.of(uniqueRoom));
-                gameService.startGame(uniqueRoomId);
-            }
-
-            // Count blue and red starts
-            long blueStarts = selectedTeams.stream().filter(t -> t == Team.BLUE).count();
-            long redStarts = selectedTeams.stream().filter(t -> t == Team.RED).count();
-
-            // With randomness, both should have at least some starts
-            // Note: This test is probabilistic but extremely unlikely to fail
-            assertThat(blueStarts + redStarts).isEqualTo(100);
-            assertThat(blueStarts).isGreaterThan(0);
-            assertThat(redStarts).isGreaterThan(0);
+            // Verify that factory.create(wordPack) is called (without Team argument)
+            // The factory handles random team selection internally
+            verify(gameStateFactory).create(eq("english"));
         }
 
         @Test
         @DisplayName("should store game state in room")
         void shouldStoreGameStateInRoom() {
             when(roomRepository.findById("STORE-ROOM1")).thenReturn(Optional.of(testRoom));
-            when(boardGenerationService.initializeGame(eq("english"), any(Team.class)))
-                    .thenReturn(mockGameState);
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
 
             GameState result = gameService.startGame("STORE-ROOM1");
 
@@ -254,8 +227,7 @@ class GameServiceTest {
         void shouldThrowExceptionWhenGameAlreadyStarted() {
             String roomId = "ALRDY-START";
             when(roomRepository.findById(roomId)).thenReturn(Optional.of(testRoom));
-            when(boardGenerationService.initializeGame(eq("english"), any(Team.class)))
-                    .thenReturn(mockGameState);
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
 
             // Start the game first time - should succeed
             gameService.startGame(roomId);
@@ -277,8 +249,7 @@ class GameServiceTest {
             String roomId = "GETST-PROG1";
             // First start the game to store state in memory
             when(roomRepository.findById(roomId)).thenReturn(Optional.of(testRoom));
-            when(boardGenerationService.initializeGame(eq("english"), any(Team.class)))
-                    .thenReturn(mockGameState);
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
             gameService.startGame(roomId);
 
             // Now get the game state

@@ -4,7 +4,22 @@ Comprehensive testing resources for the Codenames Game Backend API and WebSocket
 
 ## 📁 Files in This Directory
 
-### 1. `Codenames-WebSocket-Tests.postman_collection.json`
+### 1. `step-04-part-4.json` (NEW)
+**Step-04 Part 4: Tests CardFactory and GameStateFactory** through the game start endpoint.
+
+**Features:**
+- ✅ Complete game setup flow (create room → join players → assign roles → start game)
+- ✅ Validates CardFactory creates 25 cards with proper distribution
+- ✅ Validates GameStateFactory creates game state with random starting team
+- ✅ Tests board distribution: 9 starting team, 8 other team, 7 neutral, 1 assassin
+- ✅ Tests words are uppercase, cards are unrevealed, no initial clue/winner
+
+**Test Coverage:**
+- Setup (8 requests): Create room, join 4 players, assign team/roles
+- Start Game: Validates CardFactory and GameStateFactory output
+- Verification: Game state persistence, error cases
+
+### 2. `Codenames-WebSocket-Tests.postman_collection.json`
 Complete Postman collection with automated tests for REST API and WebSocket endpoints.
 
 **Features:**
@@ -91,6 +106,22 @@ Choose your preferred method from `WebSocket-Testing-Guide.md`:
 ---
 
 ## 📊 Test Structure
+
+### Game Start API Tests (Factory Tests)
+
+```
+Game-Start-API/
+├── 1. Setup - Create Room                    ✅ Creates room + stores IDs
+├── 2-4. Setup - Join 3 Players               ✅ Adds players for all roles
+├── 5-8. Setup - Assign Teams/Roles           ✅ Blue/Red Spymaster + Operative
+├── 9. Start Game - Tests GameStateFactory    ✅ 25 cards, correct distribution
+│   └── Tests: word uppercase, cards unrevealed, 9+8+7+1 distribution
+│   └── Tests: phase=CLUE, no winner, no clue, empty history
+├── 10. Get Game State - Verify Persistence   ✅ State stored correctly
+├── 11. Start Game Again - Should Fail        ✅ 400 already started
+├── 12. Start Game - Missing Roles            ✅ 400 cannot start
+└── 13. Get Game State - No Game              ✅ 404 not found
+```
 
 ### REST API Tests
 

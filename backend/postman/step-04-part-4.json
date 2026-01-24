@@ -1,0 +1,627 @@
+{
+	"info": {
+		"_postman_id": "step-04-part-4",
+		"name": "Step-04 Part 4 - Backend Factories (CardFactory & GameStateFactory)",
+		"description": "REST API endpoints for testing game start functionality.\nTests CardFactory and GameStateFactory through the GameService.\n\n**Step-04 Part 4: Backend Factories (TDD)**\n\n**Test Flow:**\n1. Create room with admin\n2. Join 3 more players (need 4 total for valid game)\n3. Assign players to teams and roles (2 spymasters + 2 operatives)\n4. Start game - validates GameStateFactory creates proper game state\n5. Verify board has 25 cards with correct distribution\n\n**What's Being Tested:**\n- CardFactory: Creates 25 cards with proper color distribution\n- GameStateFactory: Creates game state with random starting team\n- Board distribution: 9 starting team, 8 other team, 7 neutral, 1 assassin",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Setup - Create Room",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 201 Created\", function () {",
+							"    pm.response.to.have.status(201);",
+							"});",
+							"",
+							"pm.test(\"Room created successfully\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData).to.have.property('roomId');",
+							"    pm.expect(jsonData.roomId).to.match(/^[A-Z2-9]{5}-[A-Z2-9]{5}$/);",
+							"    ",
+							"    // Save for subsequent requests",
+							"    pm.collectionVariables.set(\"roomId\", jsonData.roomId);",
+							"    pm.collectionVariables.set(\"adminPlayerId\", jsonData.players[0].id);",
+							"    ",
+							"    console.log(\"Room ID: \" + jsonData.roomId);",
+							"    console.log(\"Admin Player ID: \" + jsonData.players[0].id);",
+							"});",
+							"",
+							"pm.test(\"canStart is false (not enough players/roles)\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.canStart).to.be.false;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"BlueSpymaster\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms"]
+				},
+				"description": "Creates a new room. The admin will become Blue Spymaster."
+			}
+		},
+		{
+			"name": "2. Setup - Join Player 2 (Red Spymaster)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player joined\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var player = jsonData.players.find(p => p.username === \"RedSpymaster\");",
+							"    pm.expect(player).to.not.be.undefined;",
+							"    pm.collectionVariables.set(\"redSpymasterId\", player.id);",
+							"    console.log(\"Red Spymaster ID: \" + player.id);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"RedSpymaster\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/join",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "join"]
+				}
+			}
+		},
+		{
+			"name": "3. Setup - Join Player 3 (Blue Operative)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player joined\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var player = jsonData.players.find(p => p.username === \"BlueOperative\");",
+							"    pm.expect(player).to.not.be.undefined;",
+							"    pm.collectionVariables.set(\"blueOperativeId\", player.id);",
+							"    console.log(\"Blue Operative ID: \" + player.id);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"BlueOperative\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/join",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "join"]
+				}
+			}
+		},
+		{
+			"name": "4. Setup - Join Player 4 (Red Operative)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player joined\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var player = jsonData.players.find(p => p.username === \"RedOperative\");",
+							"    pm.expect(player).to.not.be.undefined;",
+							"    pm.collectionVariables.set(\"redOperativeId\", player.id);",
+							"    console.log(\"Red Operative ID: \" + player.id);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"username\": \"RedOperative\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/join",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "join"]
+				}
+			}
+		},
+		{
+			"name": "5. Setup - Assign Admin as Blue Spymaster",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player assigned as Blue Spymaster\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var playerId = pm.collectionVariables.get(\"adminPlayerId\");",
+							"    var player = jsonData.players.find(p => p.id === playerId);",
+							"    pm.expect(player.team).to.eql(\"BLUE\");",
+							"    pm.expect(player.role).to.eql(\"SPYMASTER\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"team\": \"BLUE\",\n    \"role\": \"SPYMASTER\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/players/{{adminPlayerId}}/team",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "players", "{{adminPlayerId}}", "team"]
+				}
+			}
+		},
+		{
+			"name": "6. Setup - Assign Red Spymaster",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player assigned as Red Spymaster\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var playerId = pm.collectionVariables.get(\"redSpymasterId\");",
+							"    var player = jsonData.players.find(p => p.id === playerId);",
+							"    pm.expect(player.team).to.eql(\"RED\");",
+							"    pm.expect(player.role).to.eql(\"SPYMASTER\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"team\": \"RED\",\n    \"role\": \"SPYMASTER\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/players/{{redSpymasterId}}/team",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "players", "{{redSpymasterId}}", "team"]
+				}
+			}
+		},
+		{
+			"name": "7. Setup - Assign Blue Operative",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player assigned as Blue Operative\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var playerId = pm.collectionVariables.get(\"blueOperativeId\");",
+							"    var player = jsonData.players.find(p => p.id === playerId);",
+							"    pm.expect(player.team).to.eql(\"BLUE\");",
+							"    pm.expect(player.role).to.eql(\"OPERATIVE\");",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"team\": \"BLUE\",\n    \"role\": \"OPERATIVE\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/players/{{blueOperativeId}}/team",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "players", "{{blueOperativeId}}", "team"]
+				}
+			}
+		},
+		{
+			"name": "8. Setup - Assign Red Operative",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Player assigned as Red Operative\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var playerId = pm.collectionVariables.get(\"redOperativeId\");",
+							"    var player = jsonData.players.find(p => p.id === playerId);",
+							"    pm.expect(player.team).to.eql(\"RED\");",
+							"    pm.expect(player.role).to.eql(\"OPERATIVE\");",
+							"});",
+							"",
+							"pm.test(\"canStart is now true (all roles filled)\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.canStart).to.be.true;",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "PUT",
+				"header": [{"key": "Content-Type", "value": "application/json"}],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"team\": \"RED\",\n    \"role\": \"OPERATIVE\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/players/{{redOperativeId}}/team",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "players", "{{redOperativeId}}", "team"]
+				}
+			}
+		},
+		{
+			"name": "9. Start Game - Tests GameStateFactory",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Game state has 25 cards (CardFactory test)\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.board).to.be.an('array');",
+							"    pm.expect(jsonData.board).to.have.lengthOf(25);",
+							"});",
+							"",
+							"pm.test(\"All cards have words in uppercase\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    jsonData.board.forEach(function(card) {",
+							"        pm.expect(card.word).to.match(/^[A-Z]+$/);",
+							"    });",
+							"});",
+							"",
+							"pm.test(\"All cards start unrevealed\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    jsonData.board.forEach(function(card) {",
+							"        pm.expect(card.revealed).to.be.false;",
+							"    });",
+							"});",
+							"",
+							"pm.test(\"Card distribution is correct (9+8+7+1=25)\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var colors = { BLUE: 0, RED: 0, NEUTRAL: 0, ASSASSIN: 0 };",
+							"    jsonData.board.forEach(function(card) {",
+							"        colors[card.color]++;",
+							"    });",
+							"    ",
+							"    // Starting team gets 9, other gets 8",
+							"    pm.expect(colors.BLUE + colors.RED).to.eql(17);",
+							"    pm.expect(colors.NEUTRAL).to.eql(7);",
+							"    pm.expect(colors.ASSASSIN).to.eql(1);",
+							"    ",
+							"    // One team has 9, other has 8",
+							"    pm.expect([colors.BLUE, colors.RED]).to.include.members([8, 9]);",
+							"    ",
+							"    console.log(\"Card distribution: BLUE=\" + colors.BLUE + \", RED=\" + colors.RED + \", NEUTRAL=\" + colors.NEUTRAL + \", ASSASSIN=\" + colors.ASSASSIN);",
+							"});",
+							"",
+							"pm.test(\"Starting team matches card advantage\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    var colors = { BLUE: 0, RED: 0 };",
+							"    jsonData.board.forEach(function(card) {",
+							"        if (card.color === 'BLUE' || card.color === 'RED') {",
+							"            colors[card.color]++;",
+							"        }",
+							"    });",
+							"    ",
+							"    // Starting team should have 9 cards",
+							"    if (jsonData.currentTeam === 'BLUE') {",
+							"        pm.expect(colors.BLUE).to.eql(9);",
+							"        pm.expect(colors.RED).to.eql(8);",
+							"    } else {",
+							"        pm.expect(colors.RED).to.eql(9);",
+							"        pm.expect(colors.BLUE).to.eql(8);",
+							"    }",
+							"    ",
+							"    console.log(\"Starting team: \" + jsonData.currentTeam);",
+							"});",
+							"",
+							"pm.test(\"Game phase is CLUE\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.phase).to.eql(\"CLUE\");",
+							"});",
+							"",
+							"pm.test(\"Remaining counts match card distribution\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    if (jsonData.currentTeam === 'BLUE') {",
+							"        pm.expect(jsonData.blueRemaining).to.eql(9);",
+							"        pm.expect(jsonData.redRemaining).to.eql(8);",
+							"    } else {",
+							"        pm.expect(jsonData.redRemaining).to.eql(9);",
+							"        pm.expect(jsonData.blueRemaining).to.eql(8);",
+							"    }",
+							"});",
+							"",
+							"pm.test(\"No winner initially (null or omitted)\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    // JSON may omit null fields, so check for both null and undefined",
+							"    pm.expect(jsonData.winner).to.not.exist;",
+							"});",
+							"",
+							"pm.test(\"No current clue initially (null or omitted)\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    // JSON may omit null fields, so check for both null and undefined",
+							"    pm.expect(jsonData.currentClue).to.not.exist;",
+							"});",
+							"",
+							"pm.test(\"Empty history initially\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.history).to.be.an('array');",
+							"    pm.expect(jsonData.history).to.have.lengthOf(0);",
+							"});",
+							"",
+							"pm.test(\"Zero guesses remaining initially\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.guessesRemaining).to.eql(0);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/start",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "start"]
+				},
+				"description": "Starts the game. This triggers:\n- GameStateFactory.create() - creates game state with random starting team\n- CardFactory.createBoard() - creates 25 cards with proper distribution\n\n**Expected Response:**\n- 25 cards with colors (9 starting, 8 other, 7 neutral, 1 assassin)\n- currentTeam is randomly BLUE or RED\n- phase is CLUE\n- blueRemaining/redRemaining match starting team advantage"
+			}
+		},
+		{
+			"name": "10. Get Game State - Verify Persistence",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 200 OK\", function () {",
+							"    pm.response.to.have.status(200);",
+							"});",
+							"",
+							"pm.test(\"Game state is retrievable\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.board).to.have.lengthOf(25);",
+							"    pm.expect(jsonData.currentTeam).to.be.oneOf(['BLUE', 'RED']);",
+							"    pm.expect(jsonData.phase).to.eql('CLUE');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/game",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "game"]
+				},
+				"description": "Retrieves the current game state to verify it was stored correctly."
+			}
+		},
+		{
+			"name": "11. Start Game Again - Should Fail",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400 Bad Request\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Error indicates game already started\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.error).to.include('already started');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{roomId}}/start",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{roomId}}", "start"]
+				},
+				"description": "Attempts to start an already-started game. Should fail with 400."
+			}
+		},
+		{
+			"name": "12. Start Game - Missing Roles (Error)",
+			"event": [
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"// Create a new room for this test",
+							"pm.sendRequest({",
+							"    url: pm.collectionVariables.get('baseUrl') + '/api/rooms',",
+							"    method: 'POST',",
+							"    header: { 'Content-Type': 'application/json' },",
+							"    body: { mode: 'raw', raw: JSON.stringify({ username: 'TestPlayer' }) }",
+							"}, function(err, response) {",
+							"    var jsonData = response.json();",
+							"    pm.collectionVariables.set('tempRoomId', jsonData.roomId);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 400 Bad Request\", function () {",
+							"    pm.response.to.have.status(400);",
+							"});",
+							"",
+							"pm.test(\"Error indicates missing roles\", function () {",
+							"    var jsonData = pm.response.json();",
+							"    pm.expect(jsonData.error).to.include('cannot start');",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{tempRoomId}}/start",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{tempRoomId}}", "start"]
+				},
+				"description": "Attempts to start a game without all required roles. Should fail with 400."
+			}
+		},
+		{
+			"name": "13. Get Game State - No Game (Not Found)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"pm.test(\"Status code is 404 Not Found\", function () {",
+							"    pm.response.to.have.status(404);",
+							"});"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/rooms/{{tempRoomId}}/game",
+					"host": ["{{baseUrl}}"],
+					"path": ["api", "rooms", "{{tempRoomId}}", "game"]
+				},
+				"description": "Gets game state for a room where game hasn't started. Should return 404."
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8080",
+			"type": "string"
+		},
+		{
+			"key": "roomId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "adminPlayerId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "redSpymasterId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "blueOperativeId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "redOperativeId",
+			"value": "",
+			"type": "string"
+		},
+		{
+			"key": "tempRoomId",
+			"value": "",
+			"type": "string"
+		}
+	]
+}

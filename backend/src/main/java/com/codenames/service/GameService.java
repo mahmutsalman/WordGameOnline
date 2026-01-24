@@ -2,9 +2,9 @@ package com.codenames.service;
 
 import com.codenames.exception.GameStartException;
 import com.codenames.exception.RoomNotFoundException;
+import com.codenames.factory.GameStateFactory;
 import com.codenames.model.GameState;
 import com.codenames.model.Room;
-import com.codenames.model.Team;
 import com.codenames.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +12,6 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Map;
-import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -28,8 +27,7 @@ public class GameService {
     private static final String DEFAULT_WORD_PACK = "english";
 
     private final RoomRepository roomRepository;
-    private final BoardGenerationService boardGenerationService;
-    private final Random random = new Random();
+    private final GameStateFactory gameStateFactory;
 
     /**
      * In-memory storage for game states.
@@ -66,12 +64,9 @@ public class GameService {
                     "Game cannot start: requires connected spymasters and operatives on both teams");
         }
 
-        // Randomly select starting team
-        Team startingTeam = random.nextBoolean() ? Team.BLUE : Team.RED;
-        log.info("Starting team selected: {}", startingTeam);
-
-        // Generate board and initialize game state
-        GameState gameState = boardGenerationService.initializeGame(DEFAULT_WORD_PACK, startingTeam);
+        // Generate board and initialize game state (factory handles random team selection)
+        GameState gameState = gameStateFactory.create(DEFAULT_WORD_PACK);
+        log.info("Starting team selected: {}", gameState.getCurrentTeam());
 
         // Store game state in memory map and room
         gameStates.put(roomId, gameState);
