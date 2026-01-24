@@ -8,9 +8,11 @@ import com.codenames.model.Room;
 import com.codenames.repository.RoomRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -28,6 +30,7 @@ public class GameService {
 
     private final RoomRepository roomRepository;
     private final GameStateFactory gameStateFactory;
+    private final SimpMessagingTemplate messagingTemplate;
 
     /**
      * In-memory storage for game states.
@@ -72,6 +75,9 @@ public class GameService {
         gameStates.put(roomId, gameState);
         room.setGameState(gameState);
 
+        // Broadcast game state to all room subscribers
+        broadcastGameState(roomId, gameState);
+
         log.info("Game started successfully in room: {}", roomId);
         return gameState;
     }
@@ -92,5 +98,38 @@ public class GameService {
 
         // Return game state from in-memory storage
         return gameStates.get(roomId);
+    }
+
+    /**
+     * Creates a game state event map for WebSocket broadcasting.
+     *
+     * @param state the game state to convert to event
+     * @return a map containing all game state fields with "type" = "GAME_STATE"
+     */
+    public Map<String, Object> createGameStateEvent(GameState state) {
+        Map<String, Object> event = new HashMap<>();
+        event.put("type", "GAME_STATE");
+        event.put("board", state.getBoard());
+        event.put("currentTeam", state.getCurrentTeam());
+        event.put("phase", state.getPhase());
+        event.put("currentClue", state.getCurrentClue());
+        event.put("guessesRemaining", state.getGuessesRemaining());
+        event.put("blueRemaining", state.getBlueRemaining());
+        event.put("redRemaining", state.getRedRemaining());
+        event.put("winner", state.getWinner());
+        event.put("history", state.getHistory());
+        return event;
+    }
+
+    /**
+     * Broadcasts game state to all subscribers of the room's game topic.
+     *
+     * @param roomId the room ID
+     * @param state the game state to broadcast
+     */
+    private void broadcastGameState(String roomId, GameState state) {
+        String destination = "/topic/room/" + roomId + "/game";
+        log.debug("Broadcasting game state to {}", destination);
+        messagingTemplate.convertAndSend(destination, createGameStateEvent(state));
     }
 }

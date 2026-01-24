@@ -17,18 +17,22 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.IntStream;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -46,6 +50,9 @@ class GameServiceTest {
 
     @Mock
     private GameStateFactory gameStateFactory;
+
+    @Mock
+    private SimpMessagingTemplate messagingTemplate;
 
     @InjectMocks
     private GameService gameService;
@@ -236,6 +243,47 @@ class GameServiceTest {
             assertThatThrownBy(() -> gameService.startGame(roomId))
                     .isInstanceOf(GameStartException.class)
                     .hasMessageContaining("already started");
+        }
+
+        @Test
+        @DisplayName("should broadcast game state on start")
+        @SuppressWarnings("unchecked")
+        void shouldBroadcastGameStateOnStart() {
+            String roomId = "BCAST-TEST1";
+            when(roomRepository.findById(roomId)).thenReturn(Optional.of(testRoom));
+            when(gameStateFactory.create(eq("english"))).thenReturn(mockGameState);
+
+            gameService.startGame(roomId);
+
+            // Verify broadcast was called with correct destination
+            ArgumentCaptor<String> destinationCaptor = ArgumentCaptor.forClass(String.class);
+            ArgumentCaptor<Map<String, Object>> eventCaptor = ArgumentCaptor.forClass(Map.class);
+            verify(messagingTemplate).convertAndSend(destinationCaptor.capture(), eventCaptor.capture());
+
+            assertThat(destinationCaptor.getValue()).isEqualTo("/topic/room/" + roomId + "/game");
+
+            Map<String, Object> event = eventCaptor.getValue();
+            assertThat(event).containsEntry("type", "GAME_STATE");
+            assertThat(event).containsKey("board");
+            assertThat(event).containsEntry("currentTeam", Team.BLUE);
+            assertThat(event).containsEntry("phase", GamePhase.CLUE);
+        }
+
+        @Test
+        @DisplayName("should create game state event with all fields")
+        void shouldCreateGameStateEvent() {
+            Map<String, Object> event = gameService.createGameStateEvent(mockGameState);
+
+            assertThat(event).containsEntry("type", "GAME_STATE");
+            assertThat(event).containsEntry("currentTeam", Team.BLUE);
+            assertThat(event).containsEntry("phase", GamePhase.CLUE);
+            assertThat(event).containsEntry("blueRemaining", 9);
+            assertThat(event).containsEntry("redRemaining", 8);
+            assertThat(event).containsKey("board");
+            assertThat(event).containsKey("currentClue");
+            assertThat(event).containsKey("guessesRemaining");
+            assertThat(event).containsKey("winner");
+            assertThat(event).containsKey("history");
         }
     }
 
