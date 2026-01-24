@@ -1,7 +1,11 @@
 package com.codenames.controller;
 
+import com.codenames.model.Role;
 import com.codenames.model.Room;
+import com.codenames.model.Team;
+import com.codenames.service.GameService;
 import com.codenames.service.RoomService;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,6 +40,9 @@ class GameWebSocketControllerTest {
 
     @Autowired
     private RoomService roomService;
+
+    @Autowired
+    private GameService gameService;
 
     private WebSocketStompClient stompClient;
     private BlockingQueue<String> messages;
@@ -698,5 +705,331 @@ class GameWebSocketControllerTest {
         String leftMessage = session2Messages.poll(10, TimeUnit.SECONDS);
         assertThat(leftMessage).isNotNull();
         assertThat(leftMessage).contains("\"type\":\"PLAYER_LEFT\"");
+    }
+
+    // ========== GAME START BROADCASTING TESTS (Step-04 Part 5) ==========
+
+    @Test
+    void shouldBroadcastGameStateWhenGameStarts() throws Exception {
+        // Arrange: Create room with all required roles
+        String roomId = createRoomWithAllRoles();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> gameMessages = new LinkedBlockingQueue<>();
+
+        // Subscribe to game-specific topic
+        session.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                gameMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000); // Ensure subscription is registered
+
+        // Act: Start the game via service (simulates REST API call)
+        gameService.startGame(roomId);
+
+        // Assert: Verify GAME_STATE event received
+        String gameStateMsg = gameMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(gameStateMsg).isNotNull();
+        assertThat(gameStateMsg).contains("\"type\":\"GAME_STATE\"");
+        assertThat(gameStateMsg).contains("\"board\"");
+        assertThat(gameStateMsg).contains("\"currentTeam\"");
+        assertThat(gameStateMsg).contains("\"phase\"");
+    }
+
+    @Test
+    void shouldBroadcastGameStateWithCorrectBoardStructure() throws Exception {
+        // Arrange: Create room with all required roles
+        String roomId = createRoomWithAllRoles();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> gameMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                gameMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Start the game
+        gameService.startGame(roomId);
+
+        // Assert: Verify board has 25 cards
+        String gameStateMsg = gameMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(gameStateMsg).isNotNull();
+
+        JsonNode gameState = objectMapper.readTree(gameStateMsg);
+        JsonNode board = gameState.get("board");
+        assertThat(board.isArray()).isTrue();
+        assertThat(board.size()).isEqualTo(25);
+
+        // Verify each card has required fields
+        for (JsonNode card : board) {
+            assertThat(card.has("word")).isTrue();
+            assertThat(card.has("color")).isTrue();
+            assertThat(card.has("revealed")).isTrue();
+        }
+    }
+
+    @Test
+    void shouldBroadcastGameStateWithCorrectCardDistribution() throws Exception {
+        // Arrange: Create room with all required roles
+        String roomId = createRoomWithAllRoles();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> gameMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                gameMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Start the game
+        gameService.startGame(roomId);
+
+        // Assert: Verify card distribution (9 starting, 8 other, 7 neutral, 1 assassin)
+        String gameStateMsg = gameMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(gameStateMsg).isNotNull();
+
+        JsonNode gameState = objectMapper.readTree(gameStateMsg);
+        JsonNode board = gameState.get("board");
+        String currentTeam = gameState.get("currentTeam").asText();
+
+        int blueCount = 0, redCount = 0, neutralCount = 0, assassinCount = 0;
+        for (JsonNode card : board) {
+            String color = card.get("color").asText();
+            switch (color) {
+                case "BLUE" -> blueCount++;
+                case "RED" -> redCount++;
+                case "NEUTRAL" -> neutralCount++;
+                case "ASSASSIN" -> assassinCount++;
+            }
+        }
+
+        // Starting team has 9, other has 8
+        if ("BLUE".equals(currentTeam)) {
+            assertThat(blueCount).isEqualTo(9);
+            assertThat(redCount).isEqualTo(8);
+        } else {
+            assertThat(blueCount).isEqualTo(8);
+            assertThat(redCount).isEqualTo(9);
+        }
+        assertThat(neutralCount).isEqualTo(7);
+        assertThat(assassinCount).isEqualTo(1);
+    }
+
+    @Test
+    void shouldBroadcastGameStateWithCorrectRemainingCounts() throws Exception {
+        // Arrange: Create room with all required roles
+        String roomId = createRoomWithAllRoles();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> gameMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                gameMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Start the game
+        gameService.startGame(roomId);
+
+        // Assert: Verify remaining counts match card distribution
+        String gameStateMsg = gameMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(gameStateMsg).isNotNull();
+
+        JsonNode gameState = objectMapper.readTree(gameStateMsg);
+        int blueRemaining = gameState.get("blueRemaining").asInt();
+        int redRemaining = gameState.get("redRemaining").asInt();
+        String currentTeam = gameState.get("currentTeam").asText();
+
+        // Starting team has 9 remaining, other has 8
+        if ("BLUE".equals(currentTeam)) {
+            assertThat(blueRemaining).isEqualTo(9);
+            assertThat(redRemaining).isEqualTo(8);
+        } else {
+            assertThat(blueRemaining).isEqualTo(8);
+            assertThat(redRemaining).isEqualTo(9);
+        }
+    }
+
+    @Test
+    void shouldBroadcastGameStateToAllSubscribers() throws Exception {
+        // Arrange: Create room with all required roles
+        String roomId = createRoomWithAllRoles();
+
+        StompSession session1 = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+        StompSession session2 = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> messages1 = new LinkedBlockingQueue<>();
+        BlockingQueue<String> messages2 = new LinkedBlockingQueue<>();
+
+        // Both subscribe to game topic
+        session1.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                messages1.add(message);
+            }
+        });
+
+        session2.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                messages2.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Start the game
+        gameService.startGame(roomId);
+
+        // Assert: Both clients receive the broadcast
+        String msg1 = messages1.poll(10, TimeUnit.SECONDS);
+        String msg2 = messages2.poll(10, TimeUnit.SECONDS);
+
+        assertThat(msg1).isNotNull().contains("GAME_STATE");
+        assertThat(msg2).isNotNull().contains("GAME_STATE");
+
+        // Verify both received identical game state
+        JsonNode state1 = objectMapper.readTree(msg1);
+        JsonNode state2 = objectMapper.readTree(msg2);
+        assertThat(state1.get("currentTeam")).isEqualTo(state2.get("currentTeam"));
+        assertThat(state1.get("blueRemaining")).isEqualTo(state2.get("blueRemaining"));
+        assertThat(state1.get("redRemaining")).isEqualTo(state2.get("redRemaining"));
+    }
+
+    @Test
+    void shouldBroadcastGameStateWithCluePhase() throws Exception {
+        // Arrange: Create room with all required roles
+        String roomId = createRoomWithAllRoles();
+
+        StompSession session = stompClient.connectAsync(wsUrl, new StompSessionHandlerAdapter() {})
+                .get(5, TimeUnit.SECONDS);
+
+        BlockingQueue<String> gameMessages = new LinkedBlockingQueue<>();
+
+        session.subscribe("/topic/room/" + roomId + "/game", new StompFrameHandler() {
+            @Override
+            public Type getPayloadType(StompHeaders headers) {
+                return byte[].class;
+            }
+
+            @Override
+            public void handleFrame(StompHeaders headers, Object payload) {
+                String message = new String((byte[]) payload);
+                gameMessages.add(message);
+            }
+        });
+
+        Thread.sleep(1000);
+
+        // Act: Start the game
+        gameService.startGame(roomId);
+
+        // Assert: Phase should be CLUE
+        String gameStateMsg = gameMessages.poll(10, TimeUnit.SECONDS);
+        assertThat(gameStateMsg).isNotNull();
+
+        JsonNode gameState = objectMapper.readTree(gameStateMsg);
+        assertThat(gameState.get("phase").asText()).isEqualTo("CLUE");
+        assertThat(gameState.get("winner").isNull()).isTrue();
+    }
+
+    // ========== HELPER METHODS ==========
+
+    /**
+     * Creates a room with all required roles for game start:
+     * - Blue Spymaster, Blue Operative
+     * - Red Spymaster, Red Operative
+     */
+    private String createRoomWithAllRoles() {
+        // Create room with admin
+        Room room = roomService.createRoom("Admin");
+        String roomId = room.getRoomId();
+        String adminId = room.getPlayers().get(0).getId();
+
+        // Join 3 more players
+        Room afterJoin1 = roomService.joinRoom(roomId, "Player2");
+        String player2Id = afterJoin1.getPlayers().stream()
+                .filter(p -> "Player2".equals(p.getUsername()))
+                .findFirst().orElseThrow().getId();
+
+        Room afterJoin2 = roomService.joinRoom(roomId, "Player3");
+        String player3Id = afterJoin2.getPlayers().stream()
+                .filter(p -> "Player3".equals(p.getUsername()))
+                .findFirst().orElseThrow().getId();
+
+        Room afterJoin3 = roomService.joinRoom(roomId, "Player4");
+        String player4Id = afterJoin3.getPlayers().stream()
+                .filter(p -> "Player4".equals(p.getUsername()))
+                .findFirst().orElseThrow().getId();
+
+        // Assign roles
+        roomService.changePlayerTeam(roomId, adminId, Team.BLUE, Role.SPYMASTER);
+        roomService.changePlayerTeam(roomId, player2Id, Team.BLUE, Role.OPERATIVE);
+        roomService.changePlayerTeam(roomId, player3Id, Team.RED, Role.SPYMASTER);
+        roomService.changePlayerTeam(roomId, player4Id, Team.RED, Role.OPERATIVE);
+
+        return roomId;
     }
 }
