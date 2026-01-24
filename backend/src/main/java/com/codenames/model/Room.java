@@ -72,10 +72,10 @@ public class Room {
 
     /**
      * Current game state (null when in lobby, before game starts).
-     * Not persisted - will be typed as GameState in later steps.
+     * Not persisted to database - game state is ephemeral and recreated on game start.
      */
     @Transient
-    private Object gameState;  // Will be typed as GameState in later steps
+    private GameState gameState;
 
     /**
      * Find a player by their ID.

@@ -1,9 +1,14 @@
 package com.codenames.controller;
 
+import com.codenames.dto.request.ChangeTeamRequest;
 import com.codenames.dto.request.CreateRoomRequest;
 import com.codenames.dto.request.JoinRoomRequest;
+import com.codenames.dto.response.CardResponse;
+import com.codenames.dto.response.GameStateResponse;
 import com.codenames.dto.response.RoomResponse;
+import com.codenames.model.GameState;
 import com.codenames.model.Room;
+import com.codenames.service.GameService;
 import com.codenames.service.RoomService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +18,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * REST controller for room management endpoints.
@@ -25,6 +31,7 @@ import java.util.Map;
 public class RoomController {
 
     private final RoomService roomService;
+    private final GameService gameService;
 
     /**
      * Creates a new game room.
@@ -95,5 +102,104 @@ public class RoomController {
 
         log.info("User {} joined room {}", request.getUsername(), roomId);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Changes a player's team and role.
+     * PUT /api/rooms/{roomId}/players/{playerId}/team
+     *
+     * @param roomId the room ID
+     * @param playerId the player ID to update
+     * @param request the team change request
+     * @return 200 OK with updated room
+     *
+     * <p><b>Note:</b> This HTTP endpoint is provided for testing/debugging.
+     * In production, this operation is performed via WebSocket: {@code /app/room/{roomId}/team}</p>
+     */
+    @PutMapping("/{roomId}/players/{playerId}/team")
+    public ResponseEntity<RoomResponse> changePlayerTeam(
+            @PathVariable String roomId,
+            @PathVariable String playerId,
+            @Valid @RequestBody ChangeTeamRequest request) {
+        log.info("Changing team for player {} in room {}: team={}, role={}",
+                playerId, roomId, request.getTeam(), request.getRole());
+
+        Room room = roomService.changePlayerTeam(roomId, playerId, request.getTeam(), request.getRole());
+        RoomResponse response = roomService.toResponse(room);
+
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Starts the game in a room.
+     * POST /api/rooms/{roomId}/start
+     *
+     * @param roomId the room ID to start the game in
+     * @return 200 OK with game state, or 400 BAD REQUEST if game can't start
+     *
+     * <p><b>Note:</b> This HTTP endpoint is provided for testing/debugging.
+     * In production, game start will be triggered via WebSocket handler.</p>
+     */
+    @PostMapping("/{roomId}/start")
+    public ResponseEntity<GameStateResponse> startGame(@PathVariable String roomId) {
+        log.info("Received start game request for room: {}", roomId);
+
+        GameState gameState = gameService.startGame(roomId);
+        GameStateResponse response = toGameStateResponse(gameState, true);
+
+        log.info("Game started in room: {}", roomId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Gets the current game state for a room.
+     * GET /api/rooms/{roomId}/game
+     *
+     * @param roomId the room ID
+     * @return 200 OK with game state, or 404 if no game in progress
+     *
+     * <p><b>Note:</b> This HTTP endpoint is provided for testing/debugging.
+     * In production, game state is broadcast via WebSocket: {@code /topic/room/{roomId}}</p>
+     */
+    @GetMapping("/{roomId}/game")
+    public ResponseEntity<GameStateResponse> getGameState(@PathVariable String roomId) {
+        log.info("Getting game state for room: {}", roomId);
+
+        GameState gameState = gameService.getGameState(roomId);
+        if (gameState == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // For testing, show all colors (spymaster view)
+        GameStateResponse response = toGameStateResponse(gameState, true);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Converts GameState to GameStateResponse DTO.
+     *
+     * @param gameState the game state to convert
+     * @param showColors whether to show card colors (spymaster view)
+     * @return the game state response DTO
+     */
+    private GameStateResponse toGameStateResponse(GameState gameState, boolean showColors) {
+        return GameStateResponse.builder()
+                .board(gameState.getBoard().stream()
+                        .map(card -> CardResponse.builder()
+                                .word(card.getWord())
+                                .color(showColors || card.isRevealed() ? card.getColor() : null)
+                                .revealed(card.isRevealed())
+                                .selectedBy(card.getSelectedBy())
+                                .build())
+                        .collect(Collectors.toList()))
+                .currentTeam(gameState.getCurrentTeam())
+                .phase(gameState.getPhase())
+                .currentClue(gameState.getCurrentClue())
+                .guessesRemaining(gameState.getGuessesRemaining())
+                .blueRemaining(gameState.getBlueRemaining())
+                .redRemaining(gameState.getRedRemaining())
+                .winner(gameState.getWinner())
+                .history(gameState.getHistory())
+                .build();
     }
 }

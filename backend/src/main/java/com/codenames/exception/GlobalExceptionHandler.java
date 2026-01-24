@@ -59,4 +59,32 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(Map.of("error", ex.getMessage()));
     }
+
+    /**
+     * Handles GameStartException.
+     * Returns 400 BAD REQUEST status when game can't be started.
+     *
+     * @param ex the exception
+     * @return response entity with error message
+     */
+    @ExceptionHandler(com.codenames.exception.GameStartException.class)
+    public ResponseEntity<Map<String, String>> handleGameStartException(
+            com.codenames.exception.GameStartException ex) {
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                .body(Map.of("error", ex.getMessage()));
+    }
+
+    /**
+     * Handles WordPackNotFoundException.
+     * Returns 404 NOT FOUND status when word pack doesn't exist.
+     *
+     * @param ex the exception
+     * @return response entity with error message
+     */
+    @ExceptionHandler(com.codenames.exception.WordPackNotFoundException.class)
+    public ResponseEntity<Map<String, String>> handleWordPackNotFound(
+            com.codenames.exception.WordPackNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(Map.of("error", ex.getMessage()));
+    }
 }
